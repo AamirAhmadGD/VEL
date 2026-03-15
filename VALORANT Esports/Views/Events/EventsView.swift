@@ -8,26 +8,20 @@
 import SwiftUI
 
 struct EventsView: View {
-    let vlrRed = Color(red: 0.8, green: 0.1, blue: 0.1)
+    let vlrRed    = Color(red: 0.8, green: 0.1, blue: 0.1)
     let headerRed = Color(red: 1.0, green: 0.2, blue: 0.2)
     
-    // Mock Data
-    let liveEvents = [
-        Event(title: "VCT 2026: Masters Madrid", location: "Madrid, Spain", dateRange: "Mar 14 - Mar 24", prizePool: "$500,000", status: "LIVE")
-    ]
+    @StateObject private var service = VLRService.shared
+    @State private var searchText = ""
     
-    let upcomingEvents = [
-        Event(title: "VCT 2026: Americas Stage 1", location: "Los Angeles, CA", dateRange: "Apr 06 - May 12", prizePool: "TBD", status: "UPCOMING"),
-        Event(title: "VCT 2026: EMEA Stage 1", location: "Berlin, Germany", dateRange: "Apr 03 - May 12", prizePool: "TBD", status: "UPCOMING"),
-        Event(title: "VCT 2026: Pacific Stage 1", location: "Seoul, South Korea", dateRange: "Apr 06 - May 12", prizePool: "TBD", status: "UPCOMING")
-    ]
-    
-    let completedEvents = [
-        Event(title: "VCT 2026: Americas Kickoff", location: "Los Angeles, CA", dateRange: "Feb 16 - Mar 03", prizePool: "TBD", status: "COMPLETED"),
-        Event(title: "VCT 2026: Pacific Kickoff", location: "Seoul, South Korea", dateRange: "Feb 17 - Feb 25", prizePool: "TBD", status: "COMPLETED"),
-        Event(title: "VCT 2026: EMEA Kickoff", location: "Berlin, Germany", dateRange: "Feb 20 - Mar 01", prizePool: "TBD", status: "COMPLETED"),
-        Event(title: "VCT 2026: China Kickoff", location: "Shanghai, China", dateRange: "Feb 22 - Mar 02", prizePool: "TBD", status: "COMPLETED")
-    ]
+    var searchedOngoing: [VLREvent] {
+        searchText.isEmpty ? service.ongoingEvents
+            : service.ongoingEvents.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+    }
+    var searchedUpcoming: [VLREvent] {
+        searchText.isEmpty ? service.upcomingEvents
+            : service.upcomingEvents.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+    }
 
     var body: some View {
         NavigationStack {
@@ -37,18 +31,19 @@ struct EventsView: View {
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 0) {
                         
-                        // Header Title
-                        HStack {
+                        // MARK: Header
+                        HStack(alignment: .center) {
                             Text("Events")
                                 .font(.system(size: 34, weight: .bold))
                                 .foregroundStyle(.white)
                             
                             Spacer()
+                            
                             NavigationLink {
-                                PastEventsView(completedEvents: completedEvents)
+                                PastEventsView()
                             } label: {
                                 HStack(spacing: 4) {
-                                    Text("Past Events")
+                                    Text("Past")
                                     Image(systemName: "chevron.right")
                                 }
                                 .font(.system(size: 14, weight: .bold))
@@ -60,33 +55,89 @@ struct EventsView: View {
                             }
                         }
                         .padding(.horizontal)
-                        .padding(.bottom, 24)
+                        .padding(.bottom, 12)
                         
-                        // LIVE EVENTS
-                        VStack(alignment: .leading, spacing: 14) {
-                            SectionHeader(title: "ONGOING", isLive: true, color: headerRed)
-                            ForEach(liveEvents) { event in
-                                NavigationLink(destination: EventDetailView(event: event)) {
-                                    EventCard(event: event, accentColor: vlrRed, isLive: true)
+
+                        
+                        if service.isLoadingEvents {
+                            VStack(spacing: 16) {
+                                ProgressView().tint(.white)
+                                Text("Loading events…")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.5))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 80)
+                            
+                        } else if let error = service.eventsError {
+                            VStack(spacing: 12) {
+                                Image(systemName: "wifi.slash")
+                                    .font(.system(size: 40))
+                                    .foregroundStyle(.white.opacity(0.3))
+                                Text("Could not load events")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundStyle(.white)
+                                Text(error)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.white.opacity(0.4))
+                                    .multilineTextAlignment(.center)
+                                Button("Retry") { Task { await service.fetchEvents() } }
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(headerRed)
+                                    .padding(.top, 4)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 80)
+                            .padding(.horizontal)
+                            
+                        } else {
+                            // ONGOING
+                            if !searchedOngoing.isEmpty {
+                                VStack(alignment: .leading, spacing: 14) {
+                                    SectionHeader(title: "ONGOING", isLive: true, color: headerRed)
+                                    ForEach(searchedOngoing) { apiEvent in
+                                        NavigationLink(destination: EventDetailView(event: Event(from: apiEvent))) {
+                                            EventCard(event: apiEvent, accentColor: vlrRed, isLive: true)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    }
                                 }
-                                .buttonStyle(PlainButtonStyle())
+                                .padding(.horizontal)
+                                .padding(.bottom, 40)
+                            }
+                            
+                            // UPCOMING
+                            if !searchedUpcoming.isEmpty {
+                                VStack(alignment: .leading, spacing: 14) {
+                                    SectionHeader(title: "UPCOMING", color: headerRed.opacity(0.8))
+                                    ForEach(searchedUpcoming) { apiEvent in
+                                        NavigationLink(destination: EventDetailView(event: Event(from: apiEvent))) {
+                                            EventCard(event: apiEvent, accentColor: vlrRed.opacity(0.3))
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    }
+                                }
+                                .padding(.horizontal)
+                                .padding(.bottom, 40)
+                            }
+                            
+                            // Empty search
+                            if searchedOngoing.isEmpty && searchedUpcoming.isEmpty && !searchText.isEmpty {
+                                VStack(spacing: 12) {
+                                    Image(systemName: "magnifyingglass")
+                                        .font(.system(size: 40))
+                                        .foregroundStyle(.white.opacity(0.3))
+                                    Text("No events match \"\(searchText)\"")
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundStyle(.white.opacity(0.6))
+                                    Text("Try searching in Past Events for historical results")
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(.white.opacity(0.3))
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 80)
                             }
                         }
-                        .padding(.horizontal)
-                        .padding(.bottom, 40)
-                        
-                        // UPCOMING EVENTS
-                        VStack(alignment: .leading, spacing: 14) {
-                            SectionHeader(title: "UPCOMING", color: headerRed.opacity(0.8))
-                            ForEach(upcomingEvents) { event in
-                                NavigationLink(destination: EventDetailView(event: event)) {
-                                    EventCard(event: event, accentColor: vlrRed.opacity(0.3))
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            }
-                        }
-                        .padding(.horizontal)
-                        .padding(.bottom, 40)
                         
                         Spacer().frame(height: 100)
                     }
@@ -95,10 +146,13 @@ struct EventsView: View {
             }
             .navigationTitle("")
             .toolbar(.hidden, for: .navigationBar)
+            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search Events")
+            .task { await service.fetchEvents() }
         }
     }
     
-    // MARK: - Reusable Components
+    // MARK: - Subviews
+    
     struct SectionHeader: View {
         let title: String
         var isLive: Bool = false
@@ -112,23 +166,31 @@ struct EventsView: View {
     }
     
     struct EventCard: View {
-        let event: Event
+        let event: VLREvent
         let accentColor: Color
         var isLive: Bool = false
+        
+        let headerRed = Color(red: 1.0, green: 0.2, blue: 0.2)
         
         var body: some View {
             VStack(alignment: .leading, spacing: 20) {
                 HStack {
-                    Text(event.status).font(.system(size: 10, weight: .bold)).foregroundStyle(isLive ? accentColor : .white.opacity(0.4))
+                    Text(event.league.rawValue.uppercased())
+                        .font(.system(size: 9, weight: .black))
+                        .tracking(0.5)
+                        .foregroundStyle(isLive ? accentColor : .white.opacity(0.35))
+                    
                     Spacer()
+                    
                     HStack(spacing: 4) {
                         if isLive { Circle().fill(accentColor).frame(width: 8, height: 8) }
-                        Text(event.dateRange).font(.system(size: 10, weight: .black, design: .monospaced)).foregroundStyle(isLive ? accentColor : .white.opacity(0.5))
+                        Text(event.dates.isEmpty ? "TBD" : event.dates)
+                            .font(.system(size: 10, weight: .black, design: .monospaced))
+                            .foregroundStyle(isLive ? accentColor : .white.opacity(0.5))
                     }
                 }
                 
                 HStack(alignment: .center, spacing: 16) {
-                    // Event Details (Left side)
                     VStack(alignment: .leading, spacing: 8) {
                         Text(event.title)
                             .font(.system(size: 20, weight: .bold))
@@ -139,14 +201,14 @@ struct EventsView: View {
                         HStack(spacing: 12) {
                             HStack(spacing: 4) {
                                 Image(systemName: "mappin.and.ellipse")
-                                Text(event.location)
+                                Text(event.region.uppercased())
                             }
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.white.opacity(0.5))
                             
                             HStack(spacing: 4) {
                                 Image(systemName: "dollarsign.circle")
-                                Text(event.prizePool)
+                                Text(event.prize.isEmpty ? "TBD" : event.prize)
                             }
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.white.opacity(0.5))
@@ -155,51 +217,176 @@ struct EventsView: View {
                     
                     Spacer()
                     
-                    // Generic Event Icon (Right side)
-                    VStack(spacing: 10) {
-                        Circle()
-                            .fill(.white.opacity(0.05))
-                            .frame(width: 50, height: 50)
-                            .overlay(Circle().stroke(.white.opacity(0.1), lineWidth: 1))
-                            .overlay(
-                                Image(systemName: "trophy.fill")
-                                    .foregroundStyle(.white.opacity(0.3))
-                                    .font(.system(size: 20))
-                            )
+                    // Event thumbnail from API
+                    AsyncImage(url: URL(string: event.thumb)) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 50, height: 50)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        case .failure:
+                            fallbackIcon
+                        case .empty:
+                            ProgressView()
+                                .frame(width: 50, height: 50)
+                        @unknown default:
+                            fallbackIcon
+                        }
                     }
                 }
             }
-            .padding(24).background(Color(white: 0.1)).clipShape(RoundedRectangle(cornerRadius: 20))
+            .padding(24)
+            .background(Color(white: 0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 20))
             .overlay(RoundedRectangle(cornerRadius: 20).stroke(accentColor, lineWidth: isLive ? 1.2 : 0.5))
+        }
+        
+        private var fallbackIcon: some View {
+            Circle()
+                .fill(.white.opacity(0.05))
+                .frame(width: 50, height: 50)
+                .overlay(Circle().stroke(.white.opacity(0.1), lineWidth: 1))
+                .overlay(
+                    Image(systemName: "trophy.fill")
+                        .foregroundStyle(.white.opacity(0.3))
+                        .font(.system(size: 20))
+                )
+        }
+    }
+}
+
+// MARK: - Past Events View (paginated infinite scroll with chunked loading)
+
+struct PastEventsView: View {
+    @StateObject private var service = VLRService.shared
+    @State private var searchText = ""
+    @State private var isSearching = false
+    
+    let headerRed = Color(red: 1.0, green: 0.2, blue: 0.2)
+    
+    var filteredPast: [VLREvent] {
+        if searchText.isEmpty { return service.pastEvents }
+        return service.pastEvents.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+    }
+    
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            ScrollView(.vertical, showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    
+
+                    
+                    // Event list
+                    ForEach(filteredPast) { apiEvent in
+                        NavigationLink(destination: EventDetailView(event: Event(from: apiEvent))) {
+                            EventsView.EventCard(event: apiEvent, accentColor: .white.opacity(0.15))
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .onAppear {
+                            // Trigger next chunk when near the end
+                            if apiEvent.id == filteredPast.last?.id && searchText.isEmpty {
+                                Task { await service.loadNextPastChunk() }
+                            }
+                        }
+                    }
+                    
+                    if filteredPast.isEmpty && !searchText.isEmpty && !service.isLoadingPastPage {
+                        VStack(spacing: 12) {
+                            Text("No events match \"\(searchText)\"")
+                                .foregroundStyle(.white.opacity(0.4))
+                                .font(.subheadline)
+                            if service.hasMorePastPages {
+                                Button("Load more events to search") {
+                                    Task { await loadPagesForSearch() }
+                                }
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(headerRed)
+                            }
+                        }
+                        .padding(.top, 40)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                    
+                    // Loading indicator
+                    if service.isLoadingPastPage {
+                        HStack {
+                            Spacer()
+                            ProgressView().tint(.white)
+                            Text(searchText.isEmpty ? "Loading more…" : "Searching…")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.4))
+                            Spacer()
+                        }
+                        .padding(.vertical, 20)
+                    }
+                    
+                    // Error state
+                    if let error = service.pastEventsError {
+                        VStack(spacing: 8) {
+                            Text("Error loading events")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white.opacity(0.6))
+                            Text(error)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.white.opacity(0.3))
+                            Button("Retry") {
+                                Task { await service.loadNextPastChunk() }
+                            }
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(headerRed)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
+                    }
+                    
+                    // End indicator
+                    if !service.hasMorePastPages && !service.pastEvents.isEmpty && searchText.isEmpty {
+                        Text("All events loaded")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.3))
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, 20)
+                    }
+                    
+                    Spacer().frame(height: 100)
+                }
+                .padding(.horizontal)
+                .padding(.top, 10)
+            }
+        }
+        .navigationTitle("Past Events")
+        .navigationBarTitleDisplayMode(.inline)
+        .preferredColorScheme(.dark)
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search Past Events")
+        .onChange(of: searchText) { _, newValue in
+            if !newValue.isEmpty {
+                Task { await loadPagesForSearch() }
+            }
+        }
+        .task {
+            if service.pastEvents.isEmpty {
+                await service.loadNextPastChunk()
+            }
+        }
+    }
+    
+    /// Loads a few extra pages to improve search results
+    private func loadPagesForSearch() async {
+        // Load up to 5 extra chunks to expand search pool
+        for _ in 0..<5 {
+            guard service.hasMorePastPages, !service.isLoadingPastPage else { break }
+            await service.loadNextPastChunk()
+            // Check if we found results
+            let results = service.pastEvents.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+            if !results.isEmpty { break }
         }
     }
 }
 
 #Preview {
     EventsView()
-}
-
-struct PastEventsView: View {
-    let completedEvents: [Event]
-    let headerRed = Color(red: 1.0, green: 0.2, blue: 0.2)
-    
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 14) {
-                    EventsView.SectionHeader(title: "COMPLETED", color: headerRed.opacity(0.8))
-                    ForEach(completedEvents) { event in
-                        NavigationLink(destination: EventDetailView(event: event)) {
-                            EventsView.EventCard(event: event, accentColor: .white.opacity(0.15))
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.top, 20)
-                .padding(.bottom, 100)
-            }
-        }
-    }
 }
