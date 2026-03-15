@@ -8,10 +8,34 @@
 import SwiftUI
 
 struct MainTabView: View {
+    // State to track which tab is selected
+    @State private var selectedTab: Int = 0
+    
     var body: some View {
-        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
+        TabView(selection: $selectedTab) {
+            HomeView()
+                .tabItem {
+                    Label("Home", systemImage: "house")
+                }
+                .tag(0)
+            
+            EventsView()
+                .tabItem {
+                    Label("Events", systemImage: "trophy")
+                }
+                .tag(1)
+            
+            PlayersView()
+                .tabItem {
+                    Label("Players", systemImage: "person.3")
+                }
+                .tag(2)
+        }
+        .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+        .toolbarColorScheme(.dark, for: .tabBar)
     }
 }
+
 
 #Preview {
     MainTabView()
