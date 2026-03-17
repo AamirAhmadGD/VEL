@@ -5,15 +5,26 @@ import Combine
 struct HomeView: View {
     let vlrRed = Color(red: 0.8, green: 0.1, blue: 0.1)
     let headerRed = Color(red: 1.0, green: 0.2, blue: 0.2)
-    
+
     @StateObject private var service = VLRService.shared
-    
+
     @State private var hasScrolledDown: Bool = false
     @State private var isScrollDisabled = false
-    
-    // Auto-refresh timer for live scores
-    let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
-    
+
+    // Live scores: every 15s
+    let liveTimer = Timer.publish(every: 15, on: .main, in: .common).autoconnect()
+    // Upcoming refresh: every 60s
+    let upcomingTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
+
+    // IDs of matches currently in the live section (to filter from upcoming display)
+    var liveMatchIDs: Set<String> {
+        Set(service.liveMatches.map { $0.numeric_id })
+    }
+
+    var filteredUpcoming: [VLRMatch] {
+        service.upcomingMatches.filter { !liveMatchIDs.contains($0.numeric_id) }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -21,7 +32,7 @@ struct HomeView: View {
                 ScrollViewReader { proxy in
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(spacing: 0) {
-                            
+
                             GeometryReader { geo in
                                 Color.clear
                                     .frame(height: 1)
@@ -32,16 +43,16 @@ struct HomeView: View {
                             }
                             .frame(height: 1)
                             .background(Color.clear)
-                            
+
                             VStack(alignment: .leading, spacing: 14) {
                                 // "Home" & "Past Matches" Row
                                 HStack {
                                     Text("Home")
                                         .font(.system(size: 34, weight: .bold))
                                         .foregroundStyle(.white)
-                                    
+
                                     Spacer()
-                                    
+
                                     NavigationLink {
                                         PastMatchesView()
                                     } label: {
@@ -57,7 +68,7 @@ struct HomeView: View {
                                         .clipShape(Capsule())
                                     }
                                 }
-                                
+
                                 if service.isLoadingMatches && service.liveMatches.isEmpty && service.upcomingMatches.isEmpty {
                                     VStack(spacing: 16) {
                                         ProgressView().tint(.white)
@@ -76,25 +87,36 @@ struct HomeView: View {
                                     .frame(maxWidth: .infinity)
                                     .padding(.top, 80)
                                 } else {
+                                    // LIVE section – always shown if there are live matches
                                     if !service.liveMatches.isEmpty {
                                         SectionHeader(title: "LIVE", isLive: true, color: headerRed)
                                         ForEach(service.liveMatches) { match in
-                                            NavigationLink(destination: MatchDetailView(match: Match(teamA: match.team1, teamB: match.team2, time: "LIVE", tournament: match.displayTournament))) {
+                                            NavigationLink(destination: MatchDetailView(vlrMatch: match)) {
                                                 StandardMatchCard(match: match, accentColor: vlrRed, isLive: true)
                                             }
                                             .buttonStyle(PlainButtonStyle())
                                         }
                                         Spacer().frame(height: 40)
                                     }
-                                    
-                                    if !service.upcomingMatches.isEmpty {
+
+                                    // UPCOMING section – filtered to exclude any live matches
+                                    if !filteredUpcoming.isEmpty {
                                         SectionHeader(title: "UPCOMING", color: headerRed.opacity(0.8))
-                                        ForEach(service.upcomingMatches) { match in
-                                            NavigationLink(destination: MatchDetailView(match: Match(teamA: match.team1, teamB: match.team2, time: match.displayTime, tournament: match.displayTournament))) {
+                                        ForEach(filteredUpcoming) { match in
+                                            NavigationLink(destination: MatchDetailView(vlrMatch: match)) {
                                                 StandardMatchCard(match: match, accentColor: vlrRed.opacity(0.3))
                                             }
                                             .buttonStyle(PlainButtonStyle())
                                         }
+                                    }
+
+                                    // If both empty after filtering, show a placeholder
+                                    if service.liveMatches.isEmpty && filteredUpcoming.isEmpty && !service.isLoadingMatches {
+                                        Text("No matches right now")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundStyle(.white.opacity(0.4))
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.top, 60)
                                     }
                                 }
                             }
@@ -154,14 +176,15 @@ struct HomeView: View {
                     await service.fetchMatches()
                 }
             }
-            .onReceive(timer) { _ in
-                Task {
-                    await service.fetchLiveMatchesOnly()
-                }
+            .onReceive(liveTimer) { _ in
+                Task { await service.fetchLiveMatchesOnly() }
+            }
+            .onReceive(upcomingTimer) { _ in
+                Task { await service.refreshUpcomingAndPastMatches() }
             }
         }
     }
-    
+
     // MARK: - Reusable Components
     struct SectionHeader: View {
         let title: String
@@ -174,12 +197,12 @@ struct HomeView: View {
             }
         }
     }
-    
+
     struct StandardMatchCard: View {
         let match: VLRMatch
         let accentColor: Color
         var isLive: Bool = false
-        
+
         var body: some View {
             VStack(alignment: .leading, spacing: 20) {
                 HStack {
@@ -197,9 +220,11 @@ struct HomeView: View {
                     }
                     .layoutPriority(1)
                 }
-                HStack(alignment: .center) {
+                // Fix: align by .top so team logos stay at the same vertical position
+                // regardless of whether the name wraps to 2 lines
+                HStack(alignment: .top) {
                     TeamColumn(name: match.team1, flagURL: match.team1FlagURL, matchID: match.numeric_id)
-                    
+
                     Spacer()
                     VStack(spacing: 4) {
                         if match.score1 != nil || match.score2 != nil {
@@ -219,8 +244,10 @@ struct HomeView: View {
                         }
                     }
                     .frame(width: 80)
+                    // Add a top padding to visually center the score against the logos
+                    .padding(.top, 10)
                     Spacer()
-                    
+
                     TeamColumn(name: match.team2, flagURL: match.team2FlagURL, matchID: match.numeric_id)
                 }
             }
@@ -228,28 +255,33 @@ struct HomeView: View {
             .overlay(RoundedRectangle(cornerRadius: 20).stroke(accentColor, lineWidth: isLive ? 1.2 : 0.5))
         }
     }
-    
+
     struct TeamColumn: View {
         let name: String
         let flagURL: URL?
         let matchID: String
         var body: some View {
-            VStack(spacing: 10) {
+            VStack(alignment: .center, spacing: 10) {
                 TeamLogoImage(teamName: name, matchID: matchID, fallbackFlagURL: flagURL)
-                Text(name).font(.system(size: 14, weight: .bold)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.8)
+                Text(name)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(width: 90)
         }
     }
-    
+
     struct TeamLogoImage: View {
         let teamName: String
         let matchID: String
         let fallbackFlagURL: URL?
-        
+
         @State private var logoURLString: String? = nil
         @State private var isFetching: Bool = true
-        
+
         var body: some View {
             ZStack {
                 if isFetching {
@@ -257,6 +289,7 @@ struct HomeView: View {
                 } else if let urlStr = logoURLString, let url = URL(string: urlStr) {
                     AsyncImage(url: url) { image in
                         image.resizable().aspectRatio(contentMode: .fit).frame(width: 40, height: 40)
+                            .shadow(color: .white.opacity(0.35), radius: 8)
                     } placeholder: {
                         ProgressView()
                     }
@@ -270,6 +303,7 @@ struct HomeView: View {
                         case .success(let image):
                             image.resizable().aspectRatio(contentMode: .fit).frame(width: 30, height: 20)
                                 .clipShape(RoundedRectangle(cornerRadius: 3))
+                                .shadow(color: .white.opacity(0.35), radius: 8)
                                 .frame(width: 50, height: 50)
                                 .background(Circle().fill(Color.white.opacity(0.05)))
                                 .overlay(Circle().stroke(Color.white.opacity(0.1), lineWidth: 1))
@@ -286,7 +320,7 @@ struct HomeView: View {
                 isFetching = false
             }
         }
-        
+
         var fallbackIcon: some View {
             Circle().fill(Color.white.opacity(0.05)).frame(width: 50, height: 50).overlay(Circle().stroke(Color.white.opacity(0.1), lineWidth: 1))
         }
@@ -298,15 +332,15 @@ struct PastMatchesView: View {
     @State private var searchText = ""
     @State private var hasScrolledDown = false
     @State private var isShowingSearch = false
-    
+
     // UI Colors
     let headerRed = Color(red: 0.9, green: 0.2, blue: 0.2)
-    
+
     var filteredPast: [VLRMatch] {
         if searchText.isEmpty { return service.pastMatches }
         return service.pastMatches.filter { $0.team1.localizedCaseInsensitiveContains(searchText) || $0.team2.localizedCaseInsensitiveContains(searchText) }
     }
-    
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -314,9 +348,9 @@ struct PastMatchesView: View {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     HomeView.SectionHeader(title: "RECENT RESULTS", color: headerRed)
                         .padding(.top, 10)
-                        
+
                     ForEach(filteredPast) { match in
-                        NavigationLink(destination: MatchDetailView(match: Match(teamA: match.team1, teamB: match.team2, time: "FINAL", tournament: match.displayTournament, scoreA: Int(match.t1ScoreText) ?? 0, scoreB: Int(match.t2ScoreText) ?? 0))) {
+                        NavigationLink(destination: MatchDetailView(vlrMatch: match)) {
                             HomeView.StandardMatchCard(match: match, accentColor: .white.opacity(0.15))
                         }
                         .buttonStyle(PlainButtonStyle())
@@ -326,7 +360,7 @@ struct PastMatchesView: View {
                             }
                         }
                     }
-                    
+
                     if filteredPast.isEmpty && !searchText.isEmpty {
                         Text("No matches match \"\(searchText)\"")
                             .foregroundStyle(.white.opacity(0.4))
@@ -334,7 +368,7 @@ struct PastMatchesView: View {
                             .padding(.top, 40)
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
-                    
+
                     if service.isLoadingPastMatchPage {
                         HStack { Spacer(); ProgressView().tint(.white); Spacer() }
                             .padding(.vertical, 20)

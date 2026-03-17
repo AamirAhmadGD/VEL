@@ -9,7 +9,7 @@ import SwiftUI
 
 @main
 struct VALORANT_EsportsApp: App {
-    
+    @MainActor
     init() {
         // Force all UIKit backgrounds to black so no white bleeds through during transitions
         let navAppearance = UINavigationBarAppearance()

@@ -7,72 +7,53 @@
 
 import Foundation
 
-// Temporary Mock Match struct used by MatchDetailView until fully implemented
-struct Match: Identifiable {
-    let id = UUID()
-    let teamA: String
-    let teamB: String
-    let time: String
-    let tournament: String
-    var bestOf: Int = 3
-    var scoreA: Int = 0
-    var scoreB: Int = 0
-    
-    var isLive: Bool {
-        time.uppercased() == "LIVE"
-    }
+// MARK: - Match List Response Models (v2/match)
 
-    var isUpcoming: Bool {
-        time.uppercased() != "LIVE" && time.uppercased() != "FINAL"
-    }
-}
-
-// API Response Models for /v2/match
-struct VLRMatchResponse: Codable {
+struct VLRMatchResponse: Codable, Sendable {
     let data: VLRMatchData
 }
 
-struct VLRMatchData: Codable {
+struct VLRMatchData: Codable, Sendable {
     let segments: [VLRMatch]
 }
 
-struct VLRMatch: Codable, Identifiable {
+struct VLRMatch: Codable, Identifiable, Sendable {
     var id: String { match_page }
-    
+
     let team1: String
     let team2: String
     let flag1: String
     let flag2: String
     let match_page: String
-    
+
     // Optional because upcoming matches don't have scores
     let score1: String?
     let score2: String?
-    
+
     // Upcoming matches
     let time_until_match: String?
     let match_event: String?
     let match_series: String?
-    
+
     // Result matches
     let time_completed: String?
     let tournament_name: String?
     let round_info: String?
     let tournament_icon: String?
-    
+
     // Helper accessors
     var displayTime: String {
         if let comp = time_completed { return comp }
         return time_until_match ?? "TBD"
     }
-    
+
     var displayTournament: String {
         return (match_event ?? tournament_name)?.uppercased() ?? "VALORANT EVENT"
     }
-    
+
     var t1ScoreText: String { score1 ?? "-" }
     var t2ScoreText: String { score2 ?? "-" }
-    
+
     // Determine the winning team based on score (1 for team1, 2 for team2, nil if tie or unplayed)
     var winner: Int? {
         guard let s1 = score1, let s2 = score2,
@@ -81,43 +62,261 @@ struct VLRMatch: Codable, Identifiable {
         if s2Int > s1Int { return 2 }
         return nil
     }
-    
+
     // Derive a flagCDN url from vlr's "flag_kr" -> "kr.png"
     var team1FlagURL: URL? {
         let code = flag1.replacingOccurrences(of: "flag_", with: "")
         return URL(string: "https://flagcdn.com/w40/\(code).png")
     }
-    
+
     var team2FlagURL: URL? {
         let code = flag2.replacingOccurrences(of: "flag_", with: "")
         return URL(string: "https://flagcdn.com/w40/\(code).png")
     }
-    
+
     // Extract the raw numeric ID from the match_page string (e.g., "/626544/nongshim-redforce-vs..." -> "626544")
     var numeric_id: String {
         let components = match_page.components(separatedBy: "/")
-        if components.count > 1, let id = components.first(where: { Int($0) != nil }) {
-            return id
-        }
-        return ""
+        return components.first(where: { Int($0) != nil }) ?? ""
     }
 }
 
-// MARK: - Match Details API Response Models
+// MARK: - Match Detail API Response Models (v2/match/details)
 
-struct VLRMatchDetailResponse: Codable {
+struct VLRMatchDetailResponse: Codable, Sendable {
+    let status: String?
     let data: VLRMatchDetailData
 }
 
-struct VLRMatchDetailData: Codable {
+struct VLRMatchDetailData: Codable, Sendable {
+    let status: Int?
     let segments: [VLRMatchDetailSegment]
 }
 
-struct VLRMatchDetailSegment: Codable {
+struct VLRMatchDetailSegment: Codable, Sendable {
+    let match_id: String?
+    let event: VLRMatchDetailEvent?
+    let date: String?
+    let patch: String?
+    let status: String?
     let teams: [VLRMatchDetailTeam]
+    let streams: [VLRMatchDetailStream]?
+    let vods: [VLRMatchDetailVOD]?
+    let maps: [VLRMatchDetailMap]?
+    let performance: VLRMatchDetailPerformance?
+
+    // Derived helpers
+    var team1: VLRMatchDetailTeam? { teams.first }
+    var team2: VLRMatchDetailTeam? { teams.count > 1 ? teams[1] : nil }
+
+    var isLive: Bool { status?.lowercased() == "live" }
+    var isFinal: Bool { status?.lowercased() == "final" }
+    var isUpcoming: Bool { !isLive && !isFinal }
+
+    /// Aggregate player stats across all maps for the series scoreboard
+    func aggregatedPlayers() -> [AggregatedPlayerStat] {
+        guard let maps = maps else { return [] }
+        var dict: [String: AggregatedPlayerStat] = [:]
+
+        for map in maps {
+            let allPlayers = (map.players?.team1 ?? []) + (map.players?.team2 ?? [])
+            let teamFor: [String: Int] = {
+                var t: [String: Int] = [:]
+                for p in (map.players?.team1 ?? []) { t[p.name] = 1 }
+                for p in (map.players?.team2 ?? []) { t[p.name] = 2 }
+                return t
+            }()
+
+            for player in allPlayers {
+                let rating = Double(player.rating) ?? 0
+                let acs = Int(player.acs) ?? 0
+                let kills = Int(player.kills) ?? 0
+                let deaths = Int(player.deaths) ?? 0
+                let assists = Int(player.assists) ?? 0
+                let kastStr = player.kast?.replacingOccurrences(of: "%", with: "") ?? "0"
+                let kast = Double(kastStr) ?? 0
+                let adr = Int(player.adr) ?? 0
+                let hsPctStr = player.hs_pct?.replacingOccurrences(of: "%", with: "") ?? "0"
+                let hsPct = Double(hsPctStr) ?? 0
+                let fk = Int(player.fk ?? "0") ?? 0
+                let fd = Int(player.fd ?? "0") ?? 0
+                
+                // If a map is completely unplayed (e.g. 0-0 live match, or unreached Map 3),
+                // we still want to list the player on the scoreboard, but we shouldn't
+                // penalize their Series averages by incrementing `mapCount`.
+                let isUnplayed = (rating == 0 && acs == 0 && kills == 0 && deaths == 0)
+
+                if var existing = dict[player.name] {
+                    if !isUnplayed { existing.mapCount += 1 }
+                    existing.ratingSum += rating
+                    existing.acs += acs
+                    existing.kills += kills
+                    existing.deaths += deaths
+                    existing.assists += assists
+                    existing.kastSum += kast
+                    existing.adr += adr
+                    existing.hsPctSum += hsPct
+                    existing.fk += fk
+                    existing.fd += fd
+                    dict[player.name] = existing
+                } else {
+                    dict[player.name] = AggregatedPlayerStat(
+                        name: player.name,
+                        teamIndex: teamFor[player.name] ?? 0,
+                        mapCount: isUnplayed ? 0 : 1,
+                        ratingSum: rating,
+                        acs: acs,
+                        kills: kills,
+                        deaths: deaths,
+                        assists: assists,
+                        kastSum: kast,
+                        adr: adr,
+                        hsPctSum: hsPct,
+                        fk: fk,
+                        fd: fd
+                    )
+                }
+            }
+        }
+
+        return Array(dict.values)
+    }
 }
 
-struct VLRMatchDetailTeam: Codable {
+struct VLRMatchDetailEvent: Codable, Sendable {
+    let name: String?
+    let series: String?
+    let logo: String?
+}
+
+struct VLRMatchDetailTeam: Codable, Sendable {
     let name: String
-    let logo: String
+    let tag: String?
+    let logo: String?
+    let score: String?
+    let is_winner: Bool?
+}
+
+struct VLRMatchDetailStream: Codable, Sendable {
+    let name: String?
+    let url: String?
+}
+
+struct VLRMatchDetailVOD: Codable, Sendable {
+    let name: String?
+    let url: String?
+}
+
+struct VLRMatchDetailMap: Codable, Sendable {
+    let map_name: String?
+    let picked_by: String?
+    let duration: String?
+    let score: VLRMatchDetailMapScore?
+    let score_ct: VLRMatchDetailMapScore?
+    let score_t: VLRMatchDetailMapScore?
+    let score_ot: VLRMatchDetailMapScore?
+    let players: VLRMatchDetailMapPlayers?
+    let rounds: [VLRMatchDetailRound]?
+}
+
+struct VLRMatchDetailMapScore: Codable, Sendable {
+    // These can be Int (from final maps) or String (from partial/CT-T breakdowns)
+    let team1: VLRFlexibleInt?
+    let team2: VLRFlexibleInt?
+}
+
+/// Handles API fields that return either a String or Int
+struct VLRFlexibleInt: Codable, Sendable {
+    let value: Int?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let intVal = try? container.decode(Int.self) {
+            value = intVal
+        } else if let strVal = try? container.decode(String.self), let intVal = Int(strVal) {
+            value = intVal
+        } else {
+            value = nil
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        if let v = value { try container.encode(v) } else { try container.encodeNil() }
+    }
+}
+
+struct VLRMatchDetailMapPlayers: Codable, Sendable {
+    let team1: [VLRMatchDetailPlayer]?
+    let team2: [VLRMatchDetailPlayer]?
+}
+
+struct VLRMatchDetailPlayer: Codable, Sendable {
+    let name: String
+    let agent: String?
+    let rating: String
+    let acs: String
+    let kills: String
+    let deaths: String
+    let assists: String
+    let kd_diff: String?
+    let kast: String?
+    let adr: String
+    let hs_pct: String?
+    let fk: String?
+    let fd: String?
+    let fk_diff: String?
+}
+
+struct VLRMatchDetailRound: Codable, Sendable {
+    let round_num: Int?
+    let winner: String?
+    let side: String?
+}
+
+struct VLRMatchDetailPerformance: Codable, Sendable {
+    let kill_matrix: [VLRKillMatrixRow]?
+    let advanced_stats: [VLRAdvancedStat]?
+}
+
+struct VLRKillMatrixRow: Codable, Sendable {
+    let player: String?
+    let kills_vs: [String: String]?
+}
+
+struct VLRAdvancedStat: Codable, Sendable {
+    let player: String?
+}
+
+struct VLRMatchDetailEconomy: Codable, Sendable {
+    // Economy rows use indexed keys "0","1"..."5" which map to team, pistol, eco, semi, full
+    // We store as a flexible dict
+}
+
+// MARK: - Aggregated Series Player Stats
+
+struct AggregatedPlayerStat: Identifiable, Sendable {
+    var id: String { name }
+    let name: String
+    let teamIndex: Int   // 1 = team1, 2 = team2
+    var mapCount: Int
+
+    var ratingSum: Double
+    var acs: Int
+    var kills: Int
+    var deaths: Int
+    var assists: Int
+    var kastSum: Double
+    var adr: Int
+    var hsPctSum: Double
+    var fk: Int
+    var fd: Int
+
+    var avgRating: Double { mapCount > 0 ? ratingSum / Double(mapCount) : 0 }
+    var avgKAST: Double   { mapCount > 0 ? kastSum  / Double(mapCount) : 0 }
+    var avgHSPct: Double  { mapCount > 0 ? hsPctSum / Double(mapCount) : 0 }
+    var avgADR: Int       { mapCount > 0 ? adr / mapCount : 0 }
+    var avgACS: Int       { mapCount > 0 ? acs / mapCount : 0 }
+    var kdDiff: Int       { kills - deaths }
+    var fkDiff: Int       { fk - fd }
 }

@@ -142,18 +142,20 @@ final class VLRService: ObservableObject {
         
         async let liveReq: () = {
             if let url = URL(string: "\(self.baseURL)/v2/match?q=live_score") {
-                if let (data, _) = try? await URLSession.shared.data(from: url),
-                   let response = try? JSONDecoder().decode(VLRMatchResponse.self, from: data) {
-                    await MainActor.run { self.liveMatches = response.data.segments }
+                if let (data, _) = try? await URLSession.shared.data(from: url) {
+                    if let response = try? await MainActor.run(resultType: VLRMatchResponse.self, body: { try JSONDecoder().decode(VLRMatchResponse.self, from: data) }) {
+                        await MainActor.run { self.liveMatches = response.data.segments }
+                    }
                 }
             }
         }()
         
         async let upcomingReq: () = {
             if let url = URL(string: "\(self.baseURL)/v2/match?q=upcoming") {
-                if let (data, _) = try? await URLSession.shared.data(from: url),
-                   let response = try? JSONDecoder().decode(VLRMatchResponse.self, from: data) {
-                    await MainActor.run { self.upcomingMatches = response.data.segments }
+                if let (data, _) = try? await URLSession.shared.data(from: url) {
+                    if let response = try? await MainActor.run(resultType: VLRMatchResponse.self, body: { try JSONDecoder().decode(VLRMatchResponse.self, from: data) }) {
+                        await MainActor.run { self.upcomingMatches = response.data.segments }
+                    }
                 }
             }
         }()
@@ -165,12 +167,56 @@ final class VLRService: ObservableObject {
     // Silent background poll to keep scores updated
     func fetchLiveMatchesOnly() async {
         if let url = URL(string: "\(self.baseURL)/v2/match?q=live_score") {
-            if let (data, _) = try? await URLSession.shared.data(from: url),
-               let response = try? JSONDecoder().decode(VLRMatchResponse.self, from: data) {
-                await MainActor.run { self.liveMatches = response.data.segments }
+            if let (data, _) = try? await URLSession.shared.data(from: url) {
+                if let response = try? await MainActor.run(resultType: VLRMatchResponse.self, body: { try JSONDecoder().decode(VLRMatchResponse.self, from: data) }) {
+                    await MainActor.run { self.liveMatches = response.data.segments }
+                }
             }
         }
     }
+
+    // Silent background poll to keep upcoming and recent past matches updated (time left/ago)
+    func refreshUpcomingAndPastMatches() async {
+        async let upcomingReq: () = {
+            if let url = URL(string: "\(self.baseURL)/v2/match?q=upcoming") {
+                if let (data, _) = try? await URLSession.shared.data(from: url) {
+                    if let response = try? await MainActor.run(resultType: VLRMatchResponse.self, body: { try JSONDecoder().decode(VLRMatchResponse.self, from: data) }) {
+                        await MainActor.run { self.upcomingMatches = response.data.segments }
+                    }
+                }
+            }
+        }()
+        
+        async let pastReq: () = {
+            // Only fetch page 1 so we don't load huge amounts of data in the background
+            if let url = URL(string: "\(self.baseURL)/v2/match?q=results&from_page=1&to_page=1") {
+                if let (data, _) = try? await URLSession.shared.data(from: url) {
+                    if let response = try? await MainActor.run(resultType: VLRMatchResponse.self, body: { try JSONDecoder().decode(VLRMatchResponse.self, from: data) }) {
+                        await MainActor.run {
+                            let newMatches = response.data.segments
+                            var updated = self.pastMatches
+                            if updated.isEmpty {
+                                self.pastMatches = newMatches
+                                return
+                            }
+                            
+                            for newMatch in newMatches.reversed() {
+                                if let idx = updated.firstIndex(where: { $0.numeric_id == newMatch.numeric_id }) {
+                                    updated[idx] = newMatch
+                                } else {
+                                    updated.insert(newMatch, at: 0)
+                                }
+                            }
+                            self.pastMatches = updated
+                        }
+                    }
+                }
+            }
+        }()
+        
+        _ = await (upcomingReq, pastReq)
+    }
+
     
     // MARK: - Past Matches (v2 results paginated, chunked)
     
@@ -188,7 +234,7 @@ final class VLRService: ObservableObject {
                     return
                 }
                 let (data, _) = try await URLSession.shared.data(from: url)
-                let response = try JSONDecoder().decode(VLRMatchResponse.self, from: data)
+                let response = try await MainActor.run { try JSONDecoder().decode(VLRMatchResponse.self, from: data) }
                 let matches = response.data.segments
                 
                 fetchedAPIMatchPages.insert(nextAPIMatchPage)
@@ -218,5 +264,16 @@ final class VLRService: ObservableObject {
         pastMatches.append(contentsOf: chunk)
         
         isLoadingPastMatchPage = false
+    }
+
+    // MARK: - Match Details
+
+    /// Fetches full match detail from v2/match/details. Returns nil on failure.
+    func fetchMatchDetails(matchID: String) async -> VLRMatchDetailSegment? {
+        guard let url = URL(string: "\(baseURL)/v2/match/details?match_id=\(matchID)") else { return nil }
+        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+        return try? await MainActor.run {
+            try JSONDecoder().decode(VLRMatchDetailResponse.self, from: data).data.segments.first
+        }
     }
 }

@@ -61,8 +61,7 @@ actor TeamLogoCache {
         do {
             let (data, response) = try await URLSession.shared.data(from: url)
             guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else { return }
-            
-            let result = try JSONDecoder().decode(VLRMatchDetailResponse.self, from: data)
+            let result = try await MainActor.run { try JSONDecoder().decode(VLRMatchDetailResponse.self, from: data) }
             
             // The API returns segments. For standard matches, usually segment[0] contains the teams
             if let firstSegment = result.data.segments.first {
@@ -70,7 +69,7 @@ actor TeamLogoCache {
                     let teamKey = team.name.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
                     guard teamKey != "tbd" && teamKey != "tbc" else { continue }
                     
-                    let parsedLogo = team.logo.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let parsedLogo = (team.logo ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                     if parsedLogo.isEmpty || !parsedLogo.contains("owcdn.net") {
                         cache[teamKey] = "https://www.vlr.gg/img/vlr/tmp/vlr.png"
                     } else {
