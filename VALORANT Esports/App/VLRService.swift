@@ -116,4 +116,107 @@ final class VLRService: ObservableObject {
         
         isLoadingPastPage = false
     }
+    
+    // MARK: - Matches State
+    @Published var liveMatches: [VLRMatch] = []
+    @Published var upcomingMatches: [VLRMatch] = []
+    @Published var pastMatches: [VLRMatch] = []
+    
+    @Published var isLoadingMatches = false
+    @Published var matchesError: String? = nil
+    
+    // MARK: - Past Matches (paginated, chunked to ~30)
+    @Published var isLoadingPastMatchPage = false
+    @Published var pastMatchesError: String? = nil
+    var hasMorePastMatchPages = true
+    
+    private var fetchedAPIMatchPages: Set<Int> = []
+    private var pendingMatchBuffer: [VLRMatch] = []
+    private var nextAPIMatchPage = 1
+    
+    // MARK: - Current Matches (v2)
+    
+    func fetchMatches() async {
+        isLoadingMatches = true
+        matchesError = nil
+        
+        async let liveReq: () = {
+            if let url = URL(string: "\(self.baseURL)/v2/match?q=live_score") {
+                if let (data, _) = try? await URLSession.shared.data(from: url),
+                   let response = try? JSONDecoder().decode(VLRMatchResponse.self, from: data) {
+                    await MainActor.run { self.liveMatches = response.data.segments }
+                }
+            }
+        }()
+        
+        async let upcomingReq: () = {
+            if let url = URL(string: "\(self.baseURL)/v2/match?q=upcoming") {
+                if let (data, _) = try? await URLSession.shared.data(from: url),
+                   let response = try? JSONDecoder().decode(VLRMatchResponse.self, from: data) {
+                    await MainActor.run { self.upcomingMatches = response.data.segments }
+                }
+            }
+        }()
+        
+        _ = await (liveReq, upcomingReq)
+        isLoadingMatches = false
+    }
+    
+    // Silent background poll to keep scores updated
+    func fetchLiveMatchesOnly() async {
+        if let url = URL(string: "\(self.baseURL)/v2/match?q=live_score") {
+            if let (data, _) = try? await URLSession.shared.data(from: url),
+               let response = try? JSONDecoder().decode(VLRMatchResponse.self, from: data) {
+                await MainActor.run { self.liveMatches = response.data.segments }
+            }
+        }
+    }
+    
+    // MARK: - Past Matches (v2 results paginated, chunked)
+    
+    func loadNextPastMatchChunk() async {
+        guard hasMorePastMatchPages, !isLoadingPastMatchPage else { return }
+        
+        isLoadingPastMatchPage = true
+        pastMatchesError = nil
+        
+        // Refill buffer from the API if needed
+        if pendingMatchBuffer.isEmpty {
+            do {
+                guard let url = URL(string: "\(baseURL)/v2/match?q=results&from_page=\(nextAPIMatchPage)&to_page=\(nextAPIMatchPage + 4)") else {
+                    isLoadingPastMatchPage = false
+                    return
+                }
+                let (data, _) = try await URLSession.shared.data(from: url)
+                let response = try JSONDecoder().decode(VLRMatchResponse.self, from: data)
+                let matches = response.data.segments
+                
+                fetchedAPIMatchPages.insert(nextAPIMatchPage)
+                nextAPIMatchPage += 5 // Fast forward 5 pages
+                
+                if matches.isEmpty {
+                    hasMorePastMatchPages = false
+                    isLoadingPastMatchPage = false
+                    return
+                }
+                
+                // Deduplicate against what's already displayed
+                let existingIDs = Set(pastMatches.map { $0.match_page })
+                pendingMatchBuffer = matches.filter { !existingIDs.contains($0.match_page) }
+                
+            } catch {
+                pastMatchesError = error.localizedDescription
+                isLoadingPastMatchPage = false
+                return
+            }
+        }
+        
+        // Release a chunk of 150 from the buffer to test lag
+        let count = min(150, pendingMatchBuffer.count)
+        let chunk = Array(pendingMatchBuffer.prefix(count))
+        pendingMatchBuffer.removeFirst(count)
+        pastMatches.append(contentsOf: chunk)
+        
+        isLoadingPastMatchPage = false
+    }
 }

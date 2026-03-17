@@ -66,5 +66,6 @@ struct EventDetailView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .preferredColorScheme(.dark)
     }
 }

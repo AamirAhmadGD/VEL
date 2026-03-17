@@ -14,6 +14,9 @@ struct EventsView: View {
     @StateObject private var service = VLRService.shared
     @State private var searchText = ""
     
+    @State private var hasScrolledDown: Bool = false
+    @State private var isScrollDisabled = false
+    
     var searchedOngoing: [VLREvent] {
         searchText.isEmpty ? service.ongoingEvents
             : service.ongoingEvents.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
@@ -27,9 +30,20 @@ struct EventsView: View {
         NavigationStack {
             ZStack {
                 Color.black.ignoresSafeArea()
-                
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 0) {
+                ScrollViewReader { proxy in
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            
+                            GeometryReader { geo in
+                                Color.clear
+                                    .frame(height: 1)
+                                    .id("events-anchor")
+                                    .onChange(of: geo.frame(in: .named("scroll")).minY) { _, newValue in
+                                        hasScrolledDown = newValue < -250
+                                    }
+                            }
+                            .frame(height: 1)
+                            .background(Color.clear)
                         
                         // MARK: Header
                         HStack(alignment: .center) {
@@ -143,6 +157,51 @@ struct EventsView: View {
                     }
                     .padding(.top, 20)
                 }
+                .scrollDisabled(isScrollDisabled)
+                .coordinateSpace(name: "scroll")
+                .overlay(
+                    Group {
+                        if hasScrolledDown {
+                            VStack {
+                                Spacer()
+                                HStack {
+                                    Spacer()
+                                    Button {
+                                        let generator = UIImpactFeedbackGenerator(style: .medium)
+                                        generator.prepare()
+                                        withAnimation(.easeOut) {
+                                            proxy.scrollTo("events-anchor", anchor: .top)
+                                        }
+                                        isScrollDisabled = true
+                                        DispatchQueue.main.async {
+                                            isScrollDisabled = false
+                                            withAnimation(.easeOut) {
+                                                proxy.scrollTo("events-anchor", anchor: .top)
+                                            }
+                                        }
+                                        generator.impactOccurred()
+                                    } label: {
+                                        Image(systemName: "chevron.up")
+                                            .foregroundColor(.white)
+                                            .font(.system(size: 20, weight: .bold))
+                                            .frame(width: 48, height: 48)
+                                            .background(.ultraThinMaterial, in: Circle())
+                                            .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
+                                            .shadow(color: Color.black.opacity(0.35), radius: 8, x: 0, y: 2)
+                                    }
+                                    .accessibilityLabel("Recenter to Top")
+                                    .padding(.trailing, 18)
+                                    .padding(.bottom, 28)
+                                    .transition(.opacity)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                    }
+                    .ignoresSafeArea(.keyboard)
+                    .animation(.easeInOut(duration: 0.25), value: hasScrolledDown)
+                )
+                } // closes ScrollViewReader
             }
             .navigationTitle("")
             .toolbar(.hidden, for: .navigationBar)

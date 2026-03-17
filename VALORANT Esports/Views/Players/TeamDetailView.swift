@@ -8,7 +8,8 @@
 import SwiftUI
 
 struct TeamDetailView: View {
-    let team: Team
+    let teamID: String
+    let fakeName: String
     
     var body: some View {
         ZStack {
@@ -17,18 +18,18 @@ struct TeamDetailView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 24) {
                     // Header Placeholder
-                    VStack(spacing: 16) {
+                    VStack(spacing: 12) {
                         Circle()
                             .fill(.white.opacity(0.1))
                             .frame(width: 120, height: 120)
-                            .overlay(Text(team.logoAbbreviation).font(.system(size: 32, weight: .black)).foregroundStyle(.white))
+                            .overlay(Image(systemName: "shield.fill").font(.system(size: 40)).foregroundStyle(.white.opacity(0.4)))
                         
-                        Text(team.name)
+                        Text(fakeName)
                             .font(.system(size: 32, weight: .black))
                             .foregroundStyle(.white)
                         
-                        Text("Region: \(team.region)")
-                            .font(.system(size: 16, weight: .bold))
+                        Text("Team ID: \(teamID)")
+                            .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(Color(red: 1.0, green: 0.2, blue: 0.2))
                     }
                     .padding(.top, 40)

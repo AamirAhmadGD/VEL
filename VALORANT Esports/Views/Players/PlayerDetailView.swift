@@ -8,7 +8,8 @@
 import SwiftUI
 
 struct PlayerDetailView: View {
-    let player: Player
+    let playerID: String
+    let fakeName: String
     
     var body: some View {
         ZStack {
@@ -23,15 +24,11 @@ struct PlayerDetailView: View {
                             .frame(width: 120, height: 120)
                             .overlay(Image(systemName: "person.fill").font(.system(size: 40)).foregroundStyle(.white.opacity(0.4)))
                         
-                        Text(player.handle)
+                        Text(fakeName)
                             .font(.system(size: 32, weight: .black))
                             .foregroundStyle(.white)
                         
-                        Text(player.fullName)
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.6))
-                        
-                        Text("\(player.flagEmoji) \(player.teamName)")
+                        Text("Player ID: \(playerID)")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(Color(red: 1.0, green: 0.2, blue: 0.2))
                     }

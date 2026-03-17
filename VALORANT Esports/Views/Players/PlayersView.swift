@@ -10,91 +10,18 @@ import SwiftUI
 struct PlayersView: View {
     @State private var searchText = ""
     
-    // Mock Data
-    @State private var allPlayers = [
-        Player(handle: "TenZ", fullName: "Tyson Ngo", teamName: "Sentinels", flagEmoji: "🇨🇦", isFavorited: true),
-        Player(handle: "zekken", fullName: "Zachary Patrone", teamName: "Sentinels", flagEmoji: "🇺🇸", isFavorited: true),
-        Player(handle: "johnqt", fullName: "Mouhamed Amine Ouarid", teamName: "Sentinels", flagEmoji: "🇲🇦", isFavorited: false),
-        Player(handle: "Sacy", fullName: "Gustavo Rossi", teamName: "Sentinels", flagEmoji: "🇧🇷", isFavorited: false),
-        Player(handle: "Zellsis", fullName: "Jordan Montemurro", teamName: "Sentinels", flagEmoji: "🇺🇸", isFavorited: false),
-        Player(handle: "Boaster", fullName: "Jake Howlett", teamName: "FNATIC", flagEmoji: "🇬🇧", isFavorited: true),
-        Player(handle: "Derke", fullName: "Nikita Sirmitev", teamName: "FNATIC", flagEmoji: "🇫🇮", isFavorited: false),
-        Player(handle: "Alfajer", fullName: "Emir Ali Beder", teamName: "FNATIC", flagEmoji: "🇹🇷", isFavorited: false),
-        Player(handle: "Leo", fullName: "Leo Jannesson", teamName: "FNATIC", flagEmoji: "🇸🇪", isFavorited: false),
-        Player(handle: "Chronicle", fullName: "Timofey Khromov", teamName: "FNATIC", flagEmoji: "🇷🇺", isFavorited: false),
-        Player(handle: "Aspas", fullName: "Erick Santos", teamName: "Leviatán", flagEmoji: "🇧🇷", isFavorited: true),
-        Player(handle: "Demon1", fullName: "Max Mazanov", teamName: "NRG", flagEmoji: "🇺🇸", isFavorited: false),
-        Player(handle: "Less", fullName: "Felipe Basso", teamName: "LOUD", flagEmoji: "🇧🇷", isFavorited: false),
-        Player(handle: "xo", fullName: "John Doe", teamName: "Free Agent", flagEmoji: "🇺🇸", isFavorited: false),
-        Player(handle: "starxo", fullName: "Patryk Kopczynski", teamName: "KOI", flagEmoji: "🇵🇱", isFavorited: false)
-    ]
+    @StateObject private var searchService = VLRSearchService()
     
-    @State private var allTeams = [
-        Team(name: "Sentinels", region: "Americas", logoAbbreviation: "SEN", isFavorited: true),
-        Team(name: "FNATIC", region: "EMEA", logoAbbreviation: "FNC"),
-        Team(name: "LOUD", region: "Americas", logoAbbreviation: "LOUD"),
-        Team(name: "Paper Rex", region: "Pacific", logoAbbreviation: "PRX"),
-        Team(name: "NRG Esports", region: "Americas", logoAbbreviation: "NRG"),
-        Team(name: "Leviatán", region: "Americas", logoAbbreviation: "LEV"),
-        Team(name: "KOI", region: "EMEA", logoAbbreviation: "KOI")
-    ]
+    // In the future, favorites should be stored in UserDefaults / SwiftData
+    @State private var favoritedPlayers: [VLRSearchResult] = []
+    @State private var favoritedTeams: [VLRSearchResult] = []
     
-    var favoritedPlayers: [Player] {
-        allPlayers.filter { $0.isFavorited }
+    var filteredPlayers: [VLRSearchResult] {
+        searchService.results.filter { $0.isPlayer }
     }
     
-    var favoritedTeams: [Team] {
-        allTeams.filter { $0.isFavorited }
-    }
-    
-    // Dynamic Player Filter Logic
-    var filteredPlayers: [Player] {
-        if searchText.isEmpty {
-            return []
-        }
-        
-        let query = searchText.lowercased()
-        
-        return allPlayers.filter { player in
-            let isPartialMatch = player.handle.lowercased().contains(query)
-            let isExactMatch = player.handle.lowercased() == query
-            
-            // Bypass length restriction if favorited
-            if player.isFavorited {
-                return isPartialMatch
-            }
-            
-            if query.count < 3 {
-                return isExactMatch
-            } else {
-                return isPartialMatch
-            }
-        }
-    }
-    
-    // Dynamic Team Filter Logic
-    var filteredTeams: [Team] {
-        if searchText.isEmpty {
-            return []
-        }
-        
-        let query = searchText.lowercased()
-        
-        return allTeams.filter { team in
-            let isPartialMatch = team.name.lowercased().contains(query) || team.logoAbbreviation.lowercased().contains(query)
-            let isExactMatch = team.name.lowercased() == query || team.logoAbbreviation.lowercased() == query
-            
-            // Bypass length restriction if favorited
-            if team.isFavorited {
-                return isPartialMatch
-            }
-            
-            if query.count < 2 {
-                return isExactMatch
-            } else {
-                return isPartialMatch
-            }
-        }
+    var filteredTeams: [VLRSearchResult] {
+        searchService.results.filter { $0.isTeam }
     }
 
     var body: some View {
@@ -121,13 +48,14 @@ struct PlayersView: View {
                                             .font(.subheadline)
                                     } else {
                                         ForEach(favoritedPlayers) { player in
-                                            NavigationLink(destination: PlayerDetailView(player: player)) {
-                                                PlayerRowView(player: player)
+                                            NavigationLink(destination: PlayerDetailView(playerID: player.vlrID, fakeName: player.title)) {
+                                                PlayerRowView(result: player)
                                             }
                                             .buttonStyle(PlainButtonStyle())
                                         }
                                     }
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 
                                 // TEAMS
                                 VStack(alignment: .leading, spacing: 16) {
@@ -142,13 +70,14 @@ struct PlayersView: View {
                                             .font(.subheadline)
                                     } else {
                                         ForEach(favoritedTeams) { team in
-                                            NavigationLink(destination: TeamDetailView(team: team)) {
-                                                TeamRowView(team: team)
+                                            NavigationLink(destination: TeamDetailView(teamID: team.vlrID, fakeName: team.title)) {
+                                                TeamRowView(result: team)
                                             }
                                             .buttonStyle(PlainButtonStyle())
                                         }
                                     }
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 Spacer()
                             }
                             .padding(.horizontal)
@@ -164,14 +93,16 @@ struct PlayersView: View {
                                         .tracking(1.5)
                                         .foregroundStyle(Color(red: 1.0, green: 0.2, blue: 0.2))
                                     
-                                    if filteredPlayers.isEmpty {
+                                    if searchService.isSearching && filteredPlayers.isEmpty && filteredTeams.isEmpty {
+                                        ProgressView().tint(.white).frame(maxWidth: .infinity, alignment: .leading)
+                                    } else if filteredPlayers.isEmpty {
                                         Text("No players found.")
                                             .foregroundStyle(.white.opacity(0.5))
                                             .font(.subheadline)
                                     } else {
                                         ForEach(filteredPlayers) { player in
-                                            NavigationLink(destination: PlayerDetailView(player: player)) {
-                                                PlayerRowView(player: player)
+                                            NavigationLink(destination: PlayerDetailView(playerID: player.vlrID, fakeName: player.title)) {
+                                                PlayerRowView(result: player)
                                             }
                                             .buttonStyle(PlainButtonStyle())
                                         }
@@ -186,14 +117,16 @@ struct PlayersView: View {
                                         .tracking(1.5)
                                         .foregroundStyle(Color(red: 1.0, green: 0.2, blue: 0.2))
                                     
-                                    if filteredTeams.isEmpty {
+                                    if searchService.isSearching && filteredPlayers.isEmpty && filteredTeams.isEmpty {
+                                        ProgressView().tint(.white).frame(maxWidth: .infinity, alignment: .leading)
+                                    } else if filteredTeams.isEmpty {
                                         Text("No teams found.")
                                             .foregroundStyle(.white.opacity(0.5))
                                             .font(.subheadline)
                                     } else {
                                         ForEach(filteredTeams) { team in
-                                            NavigationLink(destination: TeamDetailView(team: team)) {
-                                                TeamRowView(team: team)
+                                            NavigationLink(destination: TeamDetailView(teamID: team.vlrID, fakeName: team.title)) {
+                                                TeamRowView(result: team)
                                             }
                                             .buttonStyle(PlainButtonStyle())
                                         }
@@ -205,12 +138,15 @@ struct PlayersView: View {
                             .padding(.horizontal)
                         }
                     }
-                    .padding(.vertical, 10)
+                    .padding(.vertical, 4)
                 }
             }
             .navigationTitle("Players")
             .navigationBarTitleDisplayMode(.large)
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search Players & Teams")
+            .onChange(of: searchText) { oldValue, newValue in
+                searchService.search(query: newValue)
+            }
             .toolbarColorScheme(.dark, for: .navigationBar)
             .preferredColorScheme(.dark)
         }
@@ -219,31 +155,31 @@ struct PlayersView: View {
 
 // MARK: - Subviews
 struct PlayerRowView: View {
-    let player: Player
+    let result: VLRSearchResult
     
     var body: some View {
         HStack(spacing: 16) {
-            // Profile image placeholder
-            Circle()
-                .fill(.white.opacity(0.1))
-                .frame(width: 50, height: 50)
-                .overlay(Image(systemName: "person.fill").foregroundStyle(.white.opacity(0.4)))
+            AsyncImage(url: result.imageURL) { image in
+                image.resizable().aspectRatio(contentMode: .fit)
+            } placeholder: {
+                Image(systemName: "person.fill").foregroundStyle(.white.opacity(0.4))
+            }
+            .frame(width: 50, height: 50)
+            .background(Circle().fill(.white.opacity(0.1)))
+            .clipShape(Circle())
             
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(player.flagEmoji)
-                    Text(player.handle)
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(.white)
-                }
+                Text(result.title)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.white)
                 
-                Text("\(player.fullName) • \(player.teamName)")
+                Text(result.subtitle)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white.opacity(0.5))
             }
             Spacer()
             
-            if player.isFavorited {
+            if result.isFavorited {
                 Image(systemName: "star.fill")
                     .foregroundStyle(.yellow)
             }
@@ -255,29 +191,32 @@ struct PlayerRowView: View {
 }
 
 struct TeamRowView: View {
-    let team: Team
+    let result: VLRSearchResult
     
     var body: some View {
         HStack(spacing: 16) {
-            // Team logo placeholder
-            Circle()
-                .fill(.white.opacity(0.05))
-                .frame(width: 50, height: 50)
-                .overlay(Circle().stroke(.white.opacity(0.2), lineWidth: 1))
-                .overlay(Text(team.logoAbbreviation).font(.system(size: 14, weight: .bold)).foregroundStyle(.white))
+            AsyncImage(url: result.imageURL) { image in
+                image.resizable().aspectRatio(contentMode: .fit)
+            } placeholder: {
+                Image(systemName: "shield.fill").foregroundStyle(.white.opacity(0.4))
+            }
+            .frame(width: 50, height: 50)
+            .background(Circle().fill(Color.white.opacity(0.05)))
+            .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+            .clipShape(Circle())
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(team.name)
+                Text(result.title)
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(.white)
                 
-                Text(team.region)
+                Text(result.subtitle)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white.opacity(0.5))
             }
             Spacer()
             
-            if team.isFavorited {
+            if result.isFavorited {
                 Image(systemName: "star.fill")
                     .foregroundStyle(.yellow)
             }
