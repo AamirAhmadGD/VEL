@@ -23,20 +23,32 @@ struct VALORANT_EsportsApp: App {
         let tabAppearance = UITabBarAppearance()
         tabAppearance.configureWithOpaqueBackground()
         tabAppearance.backgroundColor = .black
+        // Set unselected item color
+        tabAppearance.stackedLayoutAppearance.normal.iconColor = .white.withAlphaComponent(0.5)
+        tabAppearance.stackedLayoutAppearance.normal.titleTextAttributes = [.foregroundColor: UIColor.white.withAlphaComponent(0.5)]
+        
+        // Let the accentColor/tint override the selected state
+        
         UITabBar.appearance().standardAppearance = tabAppearance
         UITabBar.appearance().scrollEdgeAppearance = tabAppearance
+        // Change the global tint so active tabs become red
+        UITabBar.appearance().tintColor = UIColor(red: 0.9, green: 0.2, blue: 0.2, alpha: 1.0)
         
         // Table/collection view backgrounds (used internally by List/ScrollView)
         UITableView.appearance().backgroundColor = .black
         UICollectionView.appearance().backgroundColor = .black
     }
     
+    @StateObject private var favoritesManager = FavoritesManager.shared
+    
     var body: some Scene {
         WindowGroup {
             ZStack {
                 Color.black.ignoresSafeArea()
                 MainTabView()
+                    .environmentObject(favoritesManager)
                     .preferredColorScheme(.dark)
+                    .tint(Color(red: 0.9, green: 0.2, blue: 0.2)) // Global accent color fallback
             }
         }
     }

@@ -10,75 +10,70 @@ import Foundation
 actor TeamLogoCache {
     static let shared = TeamLogoCache()
     
-    // Memory cache of team name (lowercased) to logo URL string
-    private var cache: [String: String] = [:]
-    
-    // In-flight fetches to avoid duplicating API requests for the same match ID
-    private var inProgress: [String: Task<Void, Never>] = [:]
+    // Hardcoded dictionary of top/popular global teams (lowercase) to their VLR.gg logo URL.
+    // This stops the app from making dozens of heavy HTML request just to fetch tiny logos.
+    private var cache: [String: String] = [
+        "sentinels": "https://owcdn.net/img/60451cf9416ee.png",
+        "fnatic": "https://owcdn.net/img/62875027c8e06.png",
+        "paper rex": "https://owcdn.net/img/60d1edcf291aa.png",
+        "loud": "https://owcdn.net/img/62112acaf0b38.png",
+        "nrg": "https://owcdn.net/img/60cbcbd2a07dd.png",
+        "nrg esports": "https://owcdn.net/img/60cbcbd2a07dd.png",
+        "drx": "https://owcdn.net/img/61e680a37315d.png",
+        "100 thieves": "https://owcdn.net/img/64670cbdf32dd.png",
+        "cloud9": "https://owcdn.net/img/64670cfe002e3.png",
+        "leviatán": "https://owcdn.net/img/63c22b1154c5e.png",
+        "kru esports": "https://owcdn.net/img/60ec4ab2f3dc1.png",
+        "krü esports": "https://owcdn.net/img/60ec4ab2f3dc1.png",
+        "team heretics": "https://owcdn.net/img/63d8ff10b7410.png",
+        "navi": "https://owcdn.net/img/612089ffb5cd5.png",
+        "natus vincere": "https://owcdn.net/img/612089ffb5cd5.png",
+        "team liquid": "https://owcdn.net/img/63bd69c5e27a6.png",
+        "gen.g": "https://owcdn.net/img/63251c6b8eb6a.png",
+        "gen.g esports": "https://owcdn.net/img/63251c6b8eb6a.png",
+        "fpx": "https://owcdn.net/img/625fd9f8b4ae9.png",
+        "funplus phoenix": "https://owcdn.net/img/625fd9f8b4ae9.png",
+        "edg": "https://owcdn.net/img/62a2bb8488e0b.png",
+        "edward gaming": "https://owcdn.net/img/62a2bb8488e0b.png",
+        "trace esports": "https://owcdn.net/img/66b033e696f8c.png",
+        "g2 esports": "https://owcdn.net/img/60b6426ddc0ee.png",
+        "t1": "https://owcdn.net/img/601dcffcd4ec3.png",
+        "global esports": "https://owcdn.net/img/619e09d1dddc2.png",
+        "mibr": "https://owcdn.net/img/63d76e46af497.png",
+        "evil geniuses": "https://owcdn.net/img/64670d06bce8d.png",
+        "furia": "https://owcdn.net/img/60eecd333a921.png",
+        "bbl esports": "https://owcdn.net/img/63d905fd2c2be.png",
+        "fut esports": "https://owcdn.net/img/63d25bb5c34e3.png",
+        "koi": "https://owcdn.net/img/63d91cf973ce1.png",
+        "giants": "https://owcdn.net/img/63c5d79673a5a.png",
+        "team vitality": "https://owcdn.net/img/63d25a80db60b.png",
+        "zeta division": "https://owcdn.net/img/62767df3c9429.png",
+        "detonation focusme": "https://owcdn.net/img/61dc0dadd2b10.png",
+        "rrq": "https://owcdn.net/img/63f1be119d675.png",
+        "rex regum qeon": "https://owcdn.net/img/63f1be119d675.png",
+        "talon esports": "https://owcdn.net/img/63f1be7cb2f43.png",
+        "team secret": "https://owcdn.net/img/63c0aefb4ceea.png",
+        "bilibili gaming": "https://owcdn.net/img/641e7f67be847.png",
+        "bleed": "https://owcdn.net/img/6389f41debd90.png",
+        "bleed esports": "https://owcdn.net/img/6389f41debd90.png",
+        "gentle mates": "https://owcdn.net/img/6461ad58ba004.png",
+        "karmine corp": "https://owcdn.net/img/63dbbdf06443c.png"
+    ]
     
     private init() {}
     
-    /// Returns the cached logo URL string for a given team name.
-    /// If not present, it fetches the match details using `matchID` to extract
-    /// BOTH teams' logos, caches them, and then returns the requested logo.
+    /// Returns the cached logo URL string for a popular team, or nil to fallback to Country Flag.
     func getLogo(for teamName: String, matchID: String) async -> String? {
         let key = teamName.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // 1. Check if we already have it
-        if let logo = cache[key], !logo.isEmpty {
-            return logo
-        }
-        
-        // 2. We don't have it. If a fetch for this match is already running, wait for it.
-        if let existingTask = inProgress[matchID] {
-            await existingTask.value
-            return cache[key]
-        }
-        
-        // 3. Otherwise, spawn a new fetch task
-        let fetchTask = Task {
-            await fetchAndCacheLogos(matchID: matchID)
-        }
-        
-        inProgress[matchID] = fetchTask
-        await fetchTask.value
-        inProgress.removeValue(forKey: matchID)
-        // 4. Cache and return the default logo if still missing, unless TBD
-        if let fetchedLogo = cache[key], !fetchedLogo.isEmpty {
-            return fetchedLogo
-        } else if key != "tbd" && key != "tbc" {
-            let defaultLogo = "https://www.vlr.gg/img/vlr/tmp/vlr.png"
-            cache[key] = defaultLogo
-            return defaultLogo
-        }
-        
-        return nil
+        return cache[key]
     }
     
-    private func fetchAndCacheLogos(matchID: String) async {
-        guard !matchID.isEmpty, let url = URL(string: "https://vlrggapi.vercel.app/v2/match/details?match_id=\(matchID)") else { return }
-        
-        do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else { return }
-            let result = try await MainActor.run { try JSONDecoder().decode(VLRMatchDetailResponse.self, from: data) }
-            
-            // The API returns segments. For standard matches, usually segment[0] contains the teams
-            if let firstSegment = result.data.segments.first {
-                for team in firstSegment.teams {
-                    let teamKey = team.name.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard teamKey != "tbd" && teamKey != "tbc" else { continue }
-                    
-                    let parsedLogo = (team.logo ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                    if parsedLogo.isEmpty || !parsedLogo.contains("owcdn.net") {
-                        cache[teamKey] = "https://www.vlr.gg/img/vlr/tmp/vlr.png"
-                    } else {
-                        cache[teamKey] = parsedLogo
-                    }
-                }
-            }
-        } catch {
-            print("[\(matchID)] Failed to fetch or decode match details for logo cache: \(error)")
+    /// Allows other parts of the app (like MatchDetailView) to dynamically add to the dictionary
+    /// whenever they natively fetch team data.
+    func saveLogo(for teamName: String, url: String) {
+        let key = teamName.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if !key.isEmpty && key != "tbd" && key != "tbc" {
+            cache[key] = url
         }
     }
 }

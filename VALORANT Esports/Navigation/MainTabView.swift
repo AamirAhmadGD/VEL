@@ -38,4 +38,5 @@ struct MainTabView: View {
 
 #Preview {
     MainTabView()
+        .environmentObject(FavoritesManager.shared)
 }

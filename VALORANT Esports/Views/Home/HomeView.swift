@@ -7,14 +7,15 @@ struct HomeView: View {
     let headerRed = Color(red: 1.0, green: 0.2, blue: 0.2)
 
     @StateObject private var service = VLRService.shared
+    @EnvironmentObject private var favoritesManager: FavoritesManager
 
     @State private var hasScrolledDown: Bool = false
     @State private var isScrollDisabled = false
 
-    // Live scores: every 15s
-    let liveTimer = Timer.publish(every: 15, on: .main, in: .common).autoconnect()
-    // Upcoming refresh: every 60s
-    let upcomingTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
+    // Live scores: every 60s to prevent IP bans
+    let liveTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
+    // Upcoming refresh: every 5 minutes
+    let upcomingTimer = Timer.publish(every: 300, on: .main, in: .common).autoconnect()
 
     // IDs of matches currently in the live section (to filter from upcoming display)
     var liveMatchIDs: Set<String> {
@@ -89,7 +90,7 @@ struct HomeView: View {
                                 } else {
                                     // LIVE section – always shown if there are live matches
                                     if !service.liveMatches.isEmpty {
-                                        SectionHeader(title: "LIVE", isLive: true, color: headerRed)
+                                        MatchSectionHeader(title: "LIVE", isLive: true, color: headerRed)
                                         ForEach(service.liveMatches) { match in
                                             NavigationLink(destination: MatchDetailView(vlrMatch: match)) {
                                                 StandardMatchCard(match: match, accentColor: vlrRed, isLive: true)
@@ -101,7 +102,7 @@ struct HomeView: View {
 
                                     // UPCOMING section – filtered to exclude any live matches
                                     if !filteredUpcoming.isEmpty {
-                                        SectionHeader(title: "UPCOMING", color: headerRed.opacity(0.8))
+                                        MatchSectionHeader(title: "UPCOMING", color: headerRed.opacity(0.8))
                                         ForEach(filteredUpcoming) { match in
                                             NavigationLink(destination: MatchDetailView(vlrMatch: match)) {
                                                 StandardMatchCard(match: match, accentColor: vlrRed.opacity(0.3))
@@ -184,151 +185,11 @@ struct HomeView: View {
             }
         }
     }
-
-    // MARK: - Reusable Components
-    struct SectionHeader: View {
-        let title: String
-        var isLive: Bool = false
-        let color: Color
-        var body: some View {
-            HStack(spacing: 8) {
-                Text(title).font(.system(size: 14, weight: .black)).tracking(1.5).foregroundStyle(color)
-                if isLive { Circle().fill(color).frame(width: 8, height: 8) }
-            }
-        }
-    }
-
-    struct StandardMatchCard: View {
-        let match: VLRMatch
-        let accentColor: Color
-        var isLive: Bool = false
-
-        var body: some View {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack {
-                    Text(match.displayTournament)
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.4))
-                        .lineLimit(1)
-                        .padding(.trailing, 4)
-                    Spacer()
-                    HStack(spacing: 4) {
-                        if isLive { Circle().fill(accentColor).frame(width: 8, height: 8) }
-                        Text(match.displayTime)
-                            .font(.system(size: 10, weight: .black, design: .monospaced))
-                            .foregroundStyle(isLive ? accentColor : .white.opacity(0.5))
-                    }
-                    .layoutPriority(1)
-                }
-                // Fix: align by .top so team logos stay at the same vertical position
-                // regardless of whether the name wraps to 2 lines
-                HStack(alignment: .top) {
-                    TeamColumn(name: match.team1, flagURL: match.team1FlagURL, matchID: match.numeric_id)
-
-                    Spacer()
-                    VStack(spacing: 4) {
-                        if match.score1 != nil || match.score2 != nil {
-                            HStack(spacing: 8) {
-                                Text(match.t1ScoreText)
-                                    .foregroundStyle(match.winner == 1 ? .white : (isLive ? .white : .white.opacity(0.4)))
-                                Text("-")
-                                    .foregroundStyle(isLive ? .white : .white.opacity(0.4))
-                                Text(match.t2ScoreText)
-                                    .foregroundStyle(match.winner == 2 ? .white : (isLive ? .white : .white.opacity(0.4)))
-                            }
-                            .font(.system(size: 32, weight: .black, design: .default))
-                        } else {
-                            Text("VS")
-                                .font(.system(size: 24, weight: .black, design: .default))
-                                .foregroundStyle(.white.opacity(0.4))
-                        }
-                    }
-                    .frame(width: 80)
-                    // Add a top padding to visually center the score against the logos
-                    .padding(.top, 10)
-                    Spacer()
-
-                    TeamColumn(name: match.team2, flagURL: match.team2FlagURL, matchID: match.numeric_id)
-                }
-            }
-            .padding(24).background(Color(white: 0.1)).clipShape(RoundedRectangle(cornerRadius: 20))
-            .overlay(RoundedRectangle(cornerRadius: 20).stroke(accentColor, lineWidth: isLive ? 1.2 : 0.5))
-        }
-    }
-
-    struct TeamColumn: View {
-        let name: String
-        let flagURL: URL?
-        let matchID: String
-        var body: some View {
-            VStack(alignment: .center, spacing: 10) {
-                TeamLogoImage(teamName: name, matchID: matchID, fallbackFlagURL: flagURL)
-                Text(name)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(width: 90)
-        }
-    }
-
-    struct TeamLogoImage: View {
-        let teamName: String
-        let matchID: String
-        let fallbackFlagURL: URL?
-
-        @State private var logoURLString: String? = nil
-        @State private var isFetching: Bool = true
-
-        var body: some View {
-            ZStack {
-                if isFetching {
-                    ProgressView().frame(width: 50, height: 50)
-                } else if let urlStr = logoURLString, let url = URL(string: urlStr) {
-                    AsyncImage(url: url) { image in
-                        image.resizable().aspectRatio(contentMode: .fit).frame(width: 40, height: 40)
-                            .shadow(color: .white.opacity(0.35), radius: 8)
-                    } placeholder: {
-                        ProgressView()
-                    }
-                    .frame(width: 50, height: 50)
-                    .background(Circle().fill(Color.white.opacity(0.05)))
-                    .overlay(Circle().stroke(Color.white.opacity(0.1), lineWidth: 1))
-                } else {
-                    // Fallback to Country Flag
-                    AsyncImage(url: fallbackFlagURL) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().aspectRatio(contentMode: .fit).frame(width: 30, height: 20)
-                                .clipShape(RoundedRectangle(cornerRadius: 3))
-                                .shadow(color: .white.opacity(0.35), radius: 8)
-                                .frame(width: 50, height: 50)
-                                .background(Circle().fill(Color.white.opacity(0.05)))
-                                .overlay(Circle().stroke(Color.white.opacity(0.1), lineWidth: 1))
-                        case .failure, .empty:
-                            fallbackIcon
-                        @unknown default:
-                            fallbackIcon
-                        }
-                    }
-                }
-            }
-            .task {
-                logoURLString = await TeamLogoCache.shared.getLogo(for: teamName, matchID: matchID)
-                isFetching = false
-            }
-        }
-
-        var fallbackIcon: some View {
-            Circle().fill(Color.white.opacity(0.05)).frame(width: 50, height: 50).overlay(Circle().stroke(Color.white.opacity(0.1), lineWidth: 1))
-        }
-    }
 }
 
 struct PastMatchesView: View {
     @StateObject private var service = VLRService.shared
+    @EnvironmentObject private var favoritesManager: FavoritesManager
     @State private var searchText = ""
     @State private var hasScrolledDown = false
     @State private var isShowingSearch = false
@@ -346,12 +207,12 @@ struct PastMatchesView: View {
             Color.black.ignoresSafeArea()
             ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 16) {
-                    HomeView.SectionHeader(title: "RECENT RESULTS", color: headerRed)
+                    MatchSectionHeader(title: "RECENT RESULTS", color: headerRed)
                         .padding(.top, 10)
 
                     ForEach(filteredPast) { match in
                         NavigationLink(destination: MatchDetailView(vlrMatch: match)) {
-                            HomeView.StandardMatchCard(match: match, accentColor: .white.opacity(0.15))
+                            StandardMatchCard(match: match, accentColor: .white.opacity(0.15))
                         }
                         .buttonStyle(PlainButtonStyle())
                         .onAppear {
@@ -361,7 +222,7 @@ struct PastMatchesView: View {
                         }
                     }
 
-                    if filteredPast.isEmpty && !searchText.isEmpty {
+                    if filteredPast.isEmpty && !searchText.isEmpty && !service.isLoadingPastMatchPage {
                         Text("No matches match \"\(searchText)\"")
                             .foregroundStyle(.white.opacity(0.4))
                             .font(.subheadline)
@@ -369,8 +230,37 @@ struct PastMatchesView: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
 
-                    if service.isLoadingPastMatchPage {
-                        HStack { Spacer(); ProgressView().tint(.white); Spacer() }
+                    // Load More Button
+                    if service.hasMorePastMatchPages {
+                        Button {
+                            Task { await service.loadNextPastMatchChunk() }
+                        } label: {
+                            HStack(spacing: 12) {
+                                if service.isLoadingPastMatchPage {
+                                    ProgressView().tint(.white)
+                                } else {
+                                    Image(systemName: "arrow.clockwise.circle.fill")
+                                        .font(.system(size: 18))
+                                }
+                                
+                                Text(service.isLoadingPastMatchPage ? "LOADING..." : "LOAD MORE RESULTS")
+                                    .font(.system(size: 13, weight: .black))
+                                    .tracking(1.0)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 54)
+                            .background(Color.white.opacity(0.08))
+                            .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.1), lineWidth: 1))
+                        }
+                        .disabled(service.isLoadingPastMatchPage)
+                        .padding(.top, 10)
+                    } else if !service.pastMatches.isEmpty {
+                        Text("All results loaded")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.2))
+                            .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.vertical, 20)
                     }
                 }
@@ -392,4 +282,5 @@ struct PastMatchesView: View {
 
 #Preview {
     HomeView()
+        .environmentObject(FavoritesManager.shared)
 }

@@ -12,9 +12,9 @@ struct PlayersView: View {
     
     @StateObject private var searchService = VLRSearchService()
     
-    // In the future, favorites should be stored in UserDefaults / SwiftData
-    @State private var favoritedPlayers: [VLRSearchResult] = []
-    @State private var favoritedTeams: [VLRSearchResult] = []
+    @EnvironmentObject private var favoritesManager: FavoritesManager
+    
+    // Derived for easy access
     
     var filteredPlayers: [VLRSearchResult] {
         searchService.results.filter { $0.isPlayer }
@@ -42,13 +42,13 @@ struct PlayersView: View {
                                         .tracking(1.5)
                                         .foregroundStyle(Color(red: 1.0, green: 0.2, blue: 0.2))
                                     
-                                    if favoritedPlayers.isEmpty {
+                                    if favoritesManager.favoritePlayers.isEmpty {
                                         Text("You haven't favorited any players yet.")
                                             .foregroundStyle(.white.opacity(0.5))
                                             .font(.subheadline)
                                     } else {
-                                        ForEach(favoritedPlayers) { player in
-                                            NavigationLink(destination: PlayerDetailView(playerID: player.vlrID, fakeName: player.title)) {
+                                        ForEach(favoritesManager.favoritePlayers) { player in
+                                            NavigationLink(destination: PlayerDetailView(playerID: player.vlrID, fakeName: player.title, imageURL: player.imageURL)) {
                                                 PlayerRowView(result: player)
                                             }
                                             .buttonStyle(PlainButtonStyle())
@@ -64,13 +64,13 @@ struct PlayersView: View {
                                         .tracking(1.5)
                                         .foregroundStyle(Color(red: 1.0, green: 0.2, blue: 0.2))
                                     
-                                    if favoritedTeams.isEmpty {
+                                    if favoritesManager.favoriteTeams.isEmpty {
                                         Text("You haven't favorited any teams yet.")
                                             .foregroundStyle(.white.opacity(0.5))
                                             .font(.subheadline)
                                     } else {
-                                        ForEach(favoritedTeams) { team in
-                                            NavigationLink(destination: TeamDetailView(teamID: team.vlrID, fakeName: team.title)) {
+                                        ForEach(favoritesManager.favoriteTeams) { team in
+                                            NavigationLink(destination: TeamDetailView(teamID: team.vlrID, fakeName: team.title, imageURL: team.imageURL)) {
                                                 TeamRowView(result: team)
                                             }
                                             .buttonStyle(PlainButtonStyle())
@@ -101,7 +101,7 @@ struct PlayersView: View {
                                             .font(.subheadline)
                                     } else {
                                         ForEach(filteredPlayers) { player in
-                                            NavigationLink(destination: PlayerDetailView(playerID: player.vlrID, fakeName: player.title)) {
+                                            NavigationLink(destination: PlayerDetailView(playerID: player.vlrID, fakeName: player.title, imageURL: player.imageURL)) {
                                                 PlayerRowView(result: player)
                                             }
                                             .buttonStyle(PlainButtonStyle())
@@ -125,7 +125,7 @@ struct PlayersView: View {
                                             .font(.subheadline)
                                     } else {
                                         ForEach(filteredTeams) { team in
-                                            NavigationLink(destination: TeamDetailView(teamID: team.vlrID, fakeName: team.title)) {
+                                            NavigationLink(destination: TeamDetailView(teamID: team.vlrID, fakeName: team.title, imageURL: team.imageURL)) {
                                                 TeamRowView(result: team)
                                             }
                                             .buttonStyle(PlainButtonStyle())
@@ -156,6 +156,7 @@ struct PlayersView: View {
 // MARK: - Subviews
 struct PlayerRowView: View {
     let result: VLRSearchResult
+    @EnvironmentObject private var favoritesManager: FavoritesManager
     
     var body: some View {
         HStack(spacing: 16) {
@@ -167,19 +168,25 @@ struct PlayerRowView: View {
             .frame(width: 50, height: 50)
             .background(Circle().fill(.white.opacity(0.1)))
             .clipShape(Circle())
+            .shadow(color: .white.opacity(0.3), radius: 6)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(result.title)
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(.white)
                 
-                Text(result.subtitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.5))
+                if !result.subtitle.isEmpty {
+                    let sub = result.subtitle.lowercased()
+                    if sub != "player" && sub != "pro player" && sub != "team" && sub != "pro team" {
+                        Text(result.subtitle)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+                }
             }
             Spacer()
             
-            if result.isFavorited {
+            if favoritesManager.isFavorite(id: result.vlrID) {
                 Image(systemName: "star.fill")
                     .foregroundStyle(.yellow)
             }
@@ -192,6 +199,7 @@ struct PlayerRowView: View {
 
 struct TeamRowView: View {
     let result: VLRSearchResult
+    @EnvironmentObject private var favoritesManager: FavoritesManager
     
     var body: some View {
         HStack(spacing: 16) {
@@ -204,19 +212,25 @@ struct TeamRowView: View {
             .background(Circle().fill(Color.white.opacity(0.05)))
             .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
             .clipShape(Circle())
+            .shadow(color: .white.opacity(0.3), radius: 6)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(result.title)
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(.white)
                 
-                Text(result.subtitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.5))
+                if !result.subtitle.isEmpty {
+                    let sub = result.subtitle.lowercased()
+                    if sub != "player" && sub != "pro player" && sub != "team" && sub != "pro team" {
+                        Text(result.subtitle)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+                }
             }
             Spacer()
             
-            if result.isFavorited {
+            if favoritesManager.isFavorite(id: result.vlrID) {
                 Image(systemName: "star.fill")
                     .foregroundStyle(.yellow)
             }
@@ -229,4 +243,5 @@ struct TeamRowView: View {
 
 #Preview {
     PlayersView()
+        .environmentObject(FavoritesManager.shared)
 }

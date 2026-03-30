@@ -29,6 +29,10 @@ class VLRSearchService: ObservableObject {
         currentTask?.cancel()
         
         currentTask = Task {
+            // Debounce delay to prevent sending a request on every single keystroke.
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            
             isSearching = true
             let encodedQuery = trimmedQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? trimmedQuery
             
@@ -93,11 +97,13 @@ class VLRSearchService: ObservableObject {
             let title = nsString.substring(with: match.range(at: 4))
                 .replacingOccurrences(of: "\n", with: "")
                 .replacingOccurrences(of: "\t", with: "")
+                .replacingOccurrences(of: "<span style=\"font-weight:400; font-size: 12px; color: #888;\">(inactive )</span>", with: "inactive")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             
             let desc = nsString.substring(with: match.range(at: 5))
                 .replacingOccurrences(of: "\n", with: "")
                 .replacingOccurrences(of: "\t", with: "")
+                .replacingOccurrences(of: "<span style=\"font-weight:400; font-size: 12px; color: #888;\">(inactive )</span>", with: "inactive")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             
             let result = VLRSearchResult(

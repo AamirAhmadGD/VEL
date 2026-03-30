@@ -112,6 +112,14 @@ struct Event: Identifiable {
     let status: String   // "LIVE", "UPCOMING", or "COMPLETED"
     let thumbURL: String
     
+    var numericID: String? {
+        let components = id.split(separator: "/")
+        if let idx = components.firstIndex(of: "event"), components.count > idx + 1 {
+            return String(components[components.index(after: idx)])
+        }
+        return id.split(separator: "/").first(where: { Int($0) != nil }).map { String($0) }
+    }
+    
     var isLive: Bool { status.uppercased() == "LIVE" || status == "ongoing" }
     
     /// Create from API model

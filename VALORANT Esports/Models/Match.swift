@@ -41,6 +41,8 @@ struct VLRMatch: Codable, Identifiable, Sendable {
     let round_info: String?
     let tournament_icon: String?
 
+    var status: String? = nil // Added to support event-specific matches and better category filtering
+
     // Helper accessors
     var displayTime: String {
         if let comp = time_completed { return comp }
@@ -81,6 +83,78 @@ struct VLRMatch: Codable, Identifiable, Sendable {
     }
 }
 
+// MARK: - Event Match List Response Models (/events/matches)
+
+struct VLREventMatchResponse: Codable, Sendable {
+    // Note: No top-level "status" string in this endpoint
+    let data: VLREventMatchData
+}
+
+struct VLREventMatchData: Codable, Sendable {
+    let status: Int
+    let segments: [VLREventMatch]
+}
+
+struct VLREventMatch: Codable, Identifiable, Sendable {
+    var id: String { match_id }
+    let match_id: String
+    let url: String
+    let date: String
+    let status: String
+    let note: String?
+    let event_series: String?
+    let team1: VLREventMatchTeam
+    let team2: VLREventMatchTeam
+    let vods: [VLREventMatchVOD]?
+}
+
+struct VLREventMatchTeam: Codable, Sendable {
+    let name: String
+    let score: String?
+    let is_winner: Bool?
+    let logo: String?
+}
+
+struct VLREventMatchVOD: Codable, Sendable {
+    let label: String?
+    let url: String?
+}
+
+extension VLRMatch {
+    init(from eventMatch: VLREventMatch) {
+        self.team1 = eventMatch.team1.name
+        self.team2 = eventMatch.team2.name
+        self.score1 = eventMatch.team1.score
+        self.score2 = eventMatch.team2.score
+        
+        // v1 url is full https://www.vlr.gg/123171/...
+        // v2 match_page is /123171/...
+        if let urlObj = URL(string: eventMatch.url) {
+            self.match_page = urlObj.path
+        } else {
+            self.match_page = eventMatch.url
+        }
+        
+        self.match_series = eventMatch.event_series
+        self.flag1 = "" // Flags are not in this endpoint
+        self.flag2 = ""
+        
+        if eventMatch.status.lowercased() == "completed" {
+            self.time_completed = eventMatch.date
+            self.time_until_match = nil
+        } else {
+            self.time_completed = nil
+            self.time_until_match = eventMatch.date
+        }
+        
+        self.match_event = nil
+        self.tournament_name = nil
+        self.round_info = eventMatch.event_series
+        self.tournament_icon = nil
+        self.status = eventMatch.status
+    }
+}
+
 // MARK: - Match Detail API Response Models (v2/match/details)
 
 struct VLRMatchDetailResponse: Codable, Sendable {
@@ -103,6 +177,7 @@ struct VLRMatchDetailSegment: Codable, Sendable {
     let streams: [VLRMatchDetailStream]?
     let vods: [VLRMatchDetailVOD]?
     let maps: [VLRMatchDetailMap]?
+    let head_to_head: [VLRPastEncounter]?
     let performance: VLRMatchDetailPerformance?
 
     // Derived helpers
@@ -205,6 +280,14 @@ struct VLRMatchDetailStream: Codable, Sendable {
 struct VLRMatchDetailVOD: Codable, Sendable {
     let name: String?
     let url: String?
+}
+
+struct VLRPastEncounter: Codable, Sendable, Identifiable {
+    var id: String { match_page ?? UUID().uuidString }
+    let match_page: String?
+    let date: String?
+    let teams: [VLRMatchDetailTeam]?
+    let score: String?
 }
 
 struct VLRMatchDetailMap: Codable, Sendable {

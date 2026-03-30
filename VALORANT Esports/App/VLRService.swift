@@ -18,7 +18,8 @@ struct VLREventsV1Response: Codable {
 final class VLRService: ObservableObject {
     
     static let shared = VLRService()
-    private let baseURL = "https://vlrggapi.vercel.app"
+    // Using local API server since vlrggapi.vercel.app is down due to limits
+    private let baseURL = "http://127.0.0.1:3001"
     
     // MARK: - Events State
     @Published var ongoingEvents: [VLREvent] = []
@@ -274,6 +275,20 @@ final class VLRService: ObservableObject {
         guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
         return try? await MainActor.run {
             try JSONDecoder().decode(VLRMatchDetailResponse.self, from: data).data.segments.first
+        }
+    }
+    
+    /// Fetches all matches for a specific event using the dedicated event matches endpoint.
+    func fetchMatchesForEvent(eventID: String, page: Int = 1) async -> [VLRMatch] {
+        guard let url = URL(string: "\(self.baseURL)/events/matches?event_id=\(eventID)&page=\(page)") else { return [] }
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let response = try JSONDecoder().decode(VLREventMatchResponse.self, from: data)
+            return response.data.segments.map { VLRMatch(from: $0) }
+        } catch {
+            print("Error fetching event matches (page \(page)): \(error)")
+            return []
         }
     }
 }

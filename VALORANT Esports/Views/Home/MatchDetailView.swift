@@ -14,6 +14,7 @@ struct MatchDetailView: View {
     @State private var sortColumn: SortColumn = .rating
     @State private var sortAscending: Bool = false
     @State private var teamFilter: TeamFilter = .all
+    @EnvironmentObject private var favoritesManager: FavoritesManager
 
     // Colors
     let vlrRed = Color(red: 0.9, green: 0.2, blue: 0.2)
@@ -169,6 +170,12 @@ struct MatchDetailView: View {
 
                 Divider().background(Color.white.opacity(0.08))
 
+                if let streams = segment?.streams, !streams.isEmpty {
+                    livestreamSection(streams: streams)
+                        .padding(.vertical, 12)
+                    Divider().background(Color.white.opacity(0.08))
+                }
+
                 if let maps = segment?.maps, !maps.isEmpty {
                     mapSelectorRow(maps: maps)
                         .padding(.vertical, 12)
@@ -182,6 +189,13 @@ struct MatchDetailView: View {
                 // VODs
                 if let vods = segment?.vods, !vods.isEmpty {
                     vodsSection(vods: vods)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 24)
+                }
+
+                // Past Encounters
+                if let h2h = segment?.head_to_head, !h2h.isEmpty {
+                    pastEncountersSection(encounters: h2h)
                         .padding(.horizontal, 20)
                         .padding(.top, 24)
                 }
@@ -225,15 +239,16 @@ struct MatchDetailView: View {
                 VStack(spacing: 6) {
                     if let t1 = segment?.team1, let t2 = segment?.team2,
                        let s1 = t1.score, let s2 = t2.score {
-                        HStack(spacing: 10) {
+                        let isHighscore = s1.count > 1 || s2.count > 1
+                        HStack(spacing: isHighscore ? 6 : 10) {
                             Text(s1)
-                                .font(.system(size: 48, weight: .black))
+                                .font(.system(size: isHighscore ? 36 : 48, weight: .black))
                                 .foregroundStyle((t1.is_winner ?? false) ? .white : .white.opacity(0.35))
                             Text("–")
-                                .font(.system(size: 36, weight: .black))
+                                .font(.system(size: isHighscore ? 24 : 36, weight: .black))
                                 .foregroundStyle(.white.opacity(0.3))
                             Text(s2)
-                                .font(.system(size: 48, weight: .black))
+                                .font(.system(size: isHighscore ? 36 : 48, weight: .black))
                                 .foregroundStyle((t2.is_winner ?? false) ? .white : .white.opacity(0.35))
                         }
                     } else {
@@ -269,41 +284,87 @@ struct MatchDetailView: View {
     }
 
     func teamHeaderColumn(team: VLRMatchDetailTeam, isWinner: Bool) -> some View {
-        VStack(spacing: 10) {
-            if let logoStr = team.logo, let url = URL(string: logoStr) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let img):
-                        img.resizable().aspectRatio(contentMode: .fit)
-                            .frame(width: 50, height: 50)
-                            // Soft white glow for black logo contrast
-                            .shadow(color: .white.opacity(0.35), radius: 8)
-                    default:
-                        Circle().fill(.white.opacity(0.07)).frame(width: 50, height: 50)
+        NavigationLink(destination: TeamDetailView(teamID: team.name, fakeName: team.name, imageURL: URL(string: team.logo ?? ""))) {
+            VStack(spacing: 10) {
+                if let logoStr = team.logo, let url = URL(string: logoStr) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let img):
+                            img.resizable().aspectRatio(contentMode: .fit)
+                                .frame(width: 44, height: 44)
+                                .clipShape(Circle())
+                                // Soft white glow for black logo contrast
+                                .shadow(color: .white.opacity(0.35), radius: 8)
+                        default:
+                            Circle().fill(.white.opacity(0.07)).frame(width: 44, height: 44)
+                        }
+                    }
+                    .frame(width: 60, height: 60)
+                    .background(Circle().fill(.white.opacity(0.05)))
+                    .overlay(Circle().stroke(isWinner ? vlrRed.opacity(0.7) : Color.white.opacity(0.15), lineWidth: isWinner ? 2 : 1.5))
+                } else {
+                    Circle().fill(.white.opacity(0.07)).frame(width: 60, height: 60)
+                        .overlay(Circle().stroke(Color.white.opacity(0.15), lineWidth: 1.5))
+                }
+
+                VStack(spacing: 2) {
+                    HStack(spacing: 4) {
+                        if favoritesManager.isFavorite(name: team.name) {
+                            Image(systemName: "star.fill").font(.system(size: 9)).foregroundStyle(.yellow)
+                        }
+                        Text(team.name)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(isWinner ? .white : .white.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                    }
+                    if let tag = team.tag, !tag.isEmpty {
+                        Text(tag.uppercased())
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.3))
                     }
                 }
-                .frame(width: 70, height: 70)
-                .background(Circle().fill(.white.opacity(0.05)))
-                .overlay(Circle().stroke(isWinner ? vlrRed.opacity(0.7) : Color.white.opacity(0.08), lineWidth: isWinner ? 2 : 1))
-            } else {
-                Circle().fill(.white.opacity(0.07)).frame(width: 70, height: 70)
-                    .overlay(Circle().stroke(Color.white.opacity(0.08), lineWidth: 1))
             }
+            .frame(width: 100)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
 
-            VStack(spacing: 2) {
-                Text(team.name)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(isWinner ? .white : .white.opacity(0.7))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                if let tag = team.tag, !tag.isEmpty {
-                    Text(tag.uppercased())
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.3))
+    // Redundant property removed to avoid ambiguity with livestreamSection(streams:)
+
+    func livestreamSection(streams: [VLRMatchDetailStream]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("WATCH LIVE")
+                .font(.system(size: 13, weight: .black))
+                .tracking(1.5)
+                .foregroundStyle(vlrRed)
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(streams.enumerated()), id: \.offset) { _, stream in
+                        if let name = stream.name, let urlStr = stream.url, let url = URL(string: urlStr) {
+                            Button {
+                                SafariHelper.open(url)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "play.fill")
+                                        .font(.system(size: 10))
+                                    Text(name)
+                                        .font(.system(size: 12, weight: .bold))
+                                }
+                                .padding(.horizontal, 16)
+                                .frame(height: 34)
+                                .background(vlrRed.opacity(0.15))
+                                .foregroundStyle(vlrRed)
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(vlrRed.opacity(0.4), lineWidth: 1))
+                            }
+                        }
+                    }
                 }
             }
         }
-        .frame(width: 100)
+        .padding(.horizontal, 20)
     }
 
     var statusBadge: some View {
@@ -405,24 +466,32 @@ struct MatchDetailView: View {
 
                     // Player rows
                     ForEach(Array(displayedPlayers.enumerated()), id: \.element.id) { idx, player in
-                        HStack(spacing: 6) {
-                            RoundedRectangle(cornerRadius: 1.5)
-                                .fill(teamColor(for: player))
-                                .frame(width: 3, height: 28)
+                        NavigationLink(destination: PlayerDetailView(playerID: player.name, fakeName: player.name, imageURL: nil)) {
+                            HStack(spacing: 6) {
+                                RoundedRectangle(cornerRadius: 1.5)
+                                    .fill(teamColor(for: player))
+                                    .frame(width: 3, height: 28)
 
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(player.name)
-                                    .font(.system(size: 13, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .lineLimit(1)
-                                Text(teamTag(for: player))
-                                    .font(.system(size: 9, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.35))
-                                    .lineLimit(1)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    HStack(spacing: 3) {
+                                        if favoritesManager.isFavorite(name: player.name) {
+                                            Image(systemName: "star.fill").font(.system(size: 8)).foregroundStyle(.yellow)
+                                        }
+                                        Text(player.name)
+                                            .font(.system(size: 13, weight: .bold))
+                                            .foregroundStyle(favoritesManager.isFavorite(name: player.name) ? .yellow : .white)
+                                            .lineLimit(1)
+                                    }
+                                    Text(teamTag(for: player))
+                                        .font(.system(size: 9, weight: .medium))
+                                        .foregroundStyle(.white.opacity(0.35))
+                                        .lineLimit(1)
+                                }
                             }
+                            .frame(width: 110, height: 48, alignment: .leading)
+                            .background(idx % 2 == 0 ? Color.white.opacity(0.02) : Color.clear)
                         }
-                        .frame(width: 110, height: 48, alignment: .leading)
-                        .background(idx % 2 == 0 ? Color.white.opacity(0.02) : Color.clear)
+                        .buttonStyle(PlainButtonStyle())
 
                         if teamFilter == .all, idx < displayedPlayers.count - 1, displayedPlayers[idx].teamIndex != displayedPlayers[idx + 1].teamIndex {
                             Divider().background(Color.white.opacity(0.15)).padding(.vertical, 4)
@@ -501,8 +570,12 @@ struct MatchDetailView: View {
                 let label: String = {
                     switch filter {
                     case .all: return "All"
-                    case .team1: return segment?.team1?.tag?.uppercased().nonEmpty ?? segment?.team1?.name ?? "T1"
-                    case .team2: return segment?.team2?.tag?.uppercased().nonEmpty ?? segment?.team2?.name ?? "T2"
+                    case .team1: 
+                        if let tag = segment?.team1?.tag, !tag.isEmpty { return tag.uppercased() }
+                        return segment?.team1?.name ?? "T1"
+                    case .team2: 
+                        if let tag = segment?.team2?.tag, !tag.isEmpty { return tag.uppercased() }
+                        return segment?.team2?.name ?? "T2"
                     }
                 }()
 
@@ -559,33 +632,136 @@ struct MatchDetailView: View {
     // MARK: - VODs
 
     func vodsSection(vods: [VLRMatchDetailVOD]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let maps = segment?.maps ?? []
+        var mapIndex = 0
+        
+        let displayVODs: [(label: String, url: URL)] = vods.compactMap { vod in
+            guard let name = vod.name, let urlStr = vod.url, !urlStr.isEmpty, let url = URL(string: urlStr) else { return nil }
+            
+            // If it's a map VOD, try to attach the map name
+            if name.localizedCaseInsensitiveContains("Map") && mapIndex < maps.count {
+                let mapName = maps[mapIndex].map_name ?? "Unknown Map"
+                mapIndex += 1
+                return ("\(name) (\(mapName))", url)
+            }
+            
+            return (name, url)
+        }
+        
+        return VStack(alignment: .leading, spacing: 10) {
             Text("VODS")
                 .font(.system(size: 13, weight: .black))
                 .tracking(1.5)
                 .foregroundStyle(.white.opacity(0.5))
 
             VStack(spacing: 8) {
-                ForEach(Array(vods.enumerated()), id: \.offset) { _, vod in
-                    if let name = vod.name, let urlStr = vod.url, !urlStr.isEmpty, let url = URL(string: urlStr) {
-                        Link(destination: url) {
-                            HStack {
-                                Image(systemName: "play.circle.fill")
-                                    .foregroundStyle(vlrRed)
-                                Text(name)
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(.white)
-                                Spacer()
-                                Image(systemName: "arrow.up.right")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.white.opacity(0.4))
-                            }
-                            .padding(14)
-                            .background(Color.white.opacity(0.07))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                ForEach(displayVODs, id: \.url) { vod in
+                    Button {
+                        SafariHelper.open(vod.url)
+                    } label: {
+                        HStack {
+                            Image(systemName: "play.circle.fill")
+                                .foregroundStyle(vlrRed)
+                            
+                            Text(vod.label)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.white)
+                            
+                            Spacer()
+                            
+                            Image(systemName: "safari.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.white.opacity(0.4))
                         }
+                        .padding(14)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.white.opacity(0.07))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
                 }
+            }
+        }
+    }
+
+    func pastEncountersSection(encounters: [VLRPastEncounter]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("PAST ENCOUNTERS")
+                .font(.system(size: 13, weight: .black))
+                .tracking(1.5)
+                .foregroundStyle(.white.opacity(0.5))
+
+            VStack(spacing: 8) {
+                ForEach(encounters) { encounter in
+                    let t1 = encounter.teams?.first
+                    let t2 = encounter.teams?.last
+                    
+                    // Always try to show the score in a consistent order
+                    let scoreDisplay: String = {
+                        if let s1 = t1?.score, let s2 = t2?.score {
+                            return "\(s1)–\(s2)"
+                        }
+                        return encounter.score ?? "VS"
+                    }()
+                    
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(encounter.date?.uppercased() ?? "PAST")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.white.opacity(0.3))
+                            
+                            HStack(spacing: 12) {
+                                TeamMiniEncounter(team: t1)
+                                    .frame(width: 80, alignment: .leading)
+                                
+                                Text(scoreDisplay)
+                                    .font(.system(size: 13, weight: .black, design: .monospaced))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 50, alignment: .center)
+                                
+                                TeamMiniEncounter(team: t2)
+                                    .frame(width: 80, alignment: .trailing)
+                            }
+                        }
+                        
+                        Spacer()
+                        
+                        if let page = encounter.match_page, let url = URL(string: "https://www.vlr.gg\(page)") {
+                            Button {
+                                SafariHelper.open(url)
+                            } label: {
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(.white.opacity(0.2))
+                                    .padding(8)
+                                    .background(Circle().fill(.white.opacity(0.05)))
+                            }
+                        }
+                    }
+                    .padding(14)
+                    .background(Color.white.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.05), lineWidth: 1))
+                }
+            }
+        }
+    }
+
+    struct TeamMiniEncounter: View {
+        let team: VLRMatchDetailTeam?
+        var body: some View {
+            HStack(spacing: 6) {
+                if let logo = team?.logo, let url = URL(string: logo) {
+                    AsyncImage(url: url) { img in
+                        img.resizable().aspectRatio(contentMode: .fit)
+                    } placeholder: {
+                        Circle().fill(.white.opacity(0.1))
+                    }
+                    .frame(width: 20, height: 20)
+                }
+                Text(team?.tag ?? team?.name ?? "???")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .lineLimit(1)
             }
         }
     }
@@ -597,23 +773,30 @@ struct MapChip: View {
     let label: String
     let score: String?
     let isSelected: Bool
-
+    
+    let vlrRed = Color(red: 0.9, green: 0.2, blue: 0.2)
+    
     var body: some View {
-        VStack(spacing: 3) {
-            Text(label)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(isSelected ? .black : .white.opacity(0.7))
-            if let score = score {
-                Text(score)
-                    .font(.system(size: 10, weight: .black, design: .monospaced))
-                    .foregroundStyle(isSelected ? .black.opacity(0.7) : .white.opacity(0.5))
+        VStack(spacing: 4) {
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .black))
+                .tracking(0.5)
+            if let s = score {
+                Text(s)
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundStyle(isSelected ? .black.opacity(0.8) : .white.opacity(0.6))
             }
         }
-        .frame(height: 38)
-        .padding(.horizontal, 12)
+        .frame(minWidth: 80, minHeight: 46) // Unified size logic
+        .padding(.vertical, 10)
+        .padding(.horizontal, 16)
         .background(isSelected ? Color.white : Color.white.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(isSelected ? Color.clear : Color.white.opacity(0.1), lineWidth: 1))
+        .foregroundStyle(isSelected ? .black : .white)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isSelected ? vlrRed.opacity(0.5) : Color.white.opacity(0.1), lineWidth: 1)
+        )
     }
 }
 
@@ -638,11 +821,23 @@ final class MatchDetailViewModel: ObservableObject {
         guard segment == nil else { return }
         isLoading = true
         segment = await VLRService.shared.fetchMatchDetails(matchID: matchID)
+        await cacheLogos()
         isLoading = false
     }
 
     func refresh() async {
         segment = await VLRService.shared.fetchMatchDetails(matchID: matchID)
+        await cacheLogos()
+    }
+    
+    private func cacheLogos() async {
+        guard let s = segment else { return }
+        if let t1 = s.team1?.name, let logo1 = s.team1?.logo {
+            await TeamLogoCache.shared.saveLogo(for: t1, url: logo1)
+        }
+        if let t2 = s.team2?.name, let logo2 = s.team2?.logo {
+            await TeamLogoCache.shared.saveLogo(for: t2, url: logo2)
+        }
     }
 }
 
@@ -650,4 +845,26 @@ final class MatchDetailViewModel: ObservableObject {
 
 private extension String {
     var nonEmpty: String? { isEmpty ? nil : self }
+}
+
+#Preview {
+    NavigationStack {
+        MatchDetailView(vlrMatch: VLRMatch(
+            team1: "Sentinels",
+            team2: "LOUD",
+            flag1: "flag_us",
+            flag2: "flag_br",
+            match_page: "/123/sentinels-vs-loud",
+            score1: "2",
+            score2: "1",
+            time_until_match: nil,
+            match_event: "Champions 2026",
+            match_series: "Grand Final",
+            time_completed: "2 hours ago",
+            tournament_name: nil,
+            round_info: nil,
+            tournament_icon: nil
+        ))
+        .environmentObject(FavoritesManager.shared)
+    }
 }

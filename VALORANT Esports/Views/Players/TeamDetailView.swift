@@ -10,6 +10,9 @@ import SwiftUI
 struct TeamDetailView: View {
     let teamID: String
     let fakeName: String
+    let imageURL: URL?
+    
+    @EnvironmentObject private var favoritesManager: FavoritesManager
     
     var body: some View {
         ZStack {
@@ -19,18 +22,43 @@ struct TeamDetailView: View {
                 VStack(spacing: 24) {
                     // Header Placeholder
                     VStack(spacing: 12) {
-                        Circle()
-                            .fill(.white.opacity(0.1))
-                            .frame(width: 120, height: 120)
-                            .overlay(Image(systemName: "shield.fill").font(.system(size: 40)).foregroundStyle(.white.opacity(0.4)))
+                        AsyncImage(url: imageURL) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable().aspectRatio(contentMode: .fit)
+                            case .failure, .empty:
+                                Image(systemName: "shield.fill").font(.system(size: 40)).foregroundStyle(.white.opacity(0.4))
+                            @unknown default:
+                                EmptyView()
+                            }
+                        }
+                        .frame(width: 120, height: 120)
+                        .background(Circle().fill(.white.opacity(0.05)))
+                        .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                        .clipShape(Circle())
+                        .shadow(color: .white.opacity(0.35), radius: 10)
                         
                         Text(fakeName)
                             .font(.system(size: 32, weight: .black))
                             .foregroundStyle(.white)
+                            
+                        let result = VLRSearchResult(type: .team, vlrID: teamID, title: fakeName, subtitle: "", imageURL: imageURL, isFavorited: false)
                         
-                        Text("Team ID: \(teamID)")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(Color(red: 1.0, green: 0.2, blue: 0.2))
+                        Button {
+                            favoritesManager.toggleFavoriteTeam(result: result)
+                        } label: {
+                            HStack {
+                                Image(systemName: favoritesManager.isFavorite(id: teamID) ? "star.fill" : "star")
+                                Text(favoritesManager.isFavorite(id: teamID) ? "Favorited" : "Favorite Team")
+                            }
+                            .font(.system(size: 14, weight: .black))
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 12)
+                            .background(favoritesManager.isFavorite(id: teamID) ? Color.yellow.opacity(0.2) : Color.white.opacity(0.08))
+                            .foregroundStyle(favoritesManager.isFavorite(id: teamID) ? .yellow : .white)
+                            .clipShape(Capsule())
+                        }
+                        .padding(.top, 8)
                     }
                     .padding(.top, 40)
                     
@@ -59,10 +87,16 @@ struct TeamDetailView: View {
                     }
                     .padding(.horizontal)
                     
-                    Spacer()
                 }
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+#Preview {
+    NavigationStack {
+        TeamDetailView(teamID: "LOUD", fakeName: "LOUD", imageURL: nil)
+            .environmentObject(FavoritesManager.shared)
     }
 }
