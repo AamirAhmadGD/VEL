@@ -14,6 +14,10 @@ struct VLREventsV1Response: Codable {
     let data: VLREventsData
 }
 
+struct VLRAPIErrorResponse: Codable {
+    let detail: String
+}
+
 @MainActor
 final class VLRService: ObservableObject {
     
@@ -290,5 +294,78 @@ final class VLRService: ObservableObject {
             print("Error fetching event matches (page \(page)): \(error)")
             return []
         }
+    }
+    
+    // MARK: - Player Profile
+    
+    func fetchPlayerProfile(id: String) async throws -> VLRPlayerProfile {
+        let url = URL(string: "\(baseURL)/v2/player?id=\(id)")!
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+        
+        if httpResponse.statusCode != 200 {
+            let errorResp = try? JSONDecoder().decode(VLRAPIErrorResponse.self, from: data)
+            throw NSError(domain: "VLRService", code: httpResponse.statusCode, userInfo: [
+                NSLocalizedDescriptionKey: errorResp?.detail ?? "Failed to fetch player profile."
+            ])
+        }
+        
+        let decoder = JSONDecoder()
+        let resp = try decoder.decode(VLRPlayerResponse.self, from: data)
+        guard let profile = resp.data.segments.first else {
+            throw NSError(domain: "VLRService", code: 404, userInfo: [
+                NSLocalizedDescriptionKey: "Player profile not found"
+            ])
+        }
+        
+        return profile
+    }
+    
+    // MARK: - Team Profile
+    
+    func fetchTeamProfile(id: String) async throws -> VLRTeamProfile {
+        let url = URL(string: "\(baseURL)/v2/team?id=\(id)")!
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+        
+        if httpResponse.statusCode != 200 {
+            let errorResp = try? JSONDecoder().decode(VLRAPIErrorResponse.self, from: data)
+            throw NSError(domain: "VLRService", code: httpResponse.statusCode, userInfo: [
+                NSLocalizedDescriptionKey: errorResp?.detail ?? "Failed to fetch team profile."
+            ])
+        }
+        
+        let resp = try JSONDecoder().decode(VLRTeamResponse.self, from: data)
+        guard let profile = resp.data.segments.first else {
+            throw NSError(domain: "VLRService", code: 404, userInfo: [
+                NSLocalizedDescriptionKey: "Team profile not found"
+            ])
+        }
+        return profile
+    }
+    
+    func fetchTeamTransactions(id: String) async throws -> [VLRTeamTransaction] {
+        let url = URL(string: "\(baseURL)/v2/team/transactions?id=\(id)")!
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+        
+        if httpResponse.statusCode != 200 {
+            let errorResp = try? JSONDecoder().decode(VLRAPIErrorResponse.self, from: data)
+            throw NSError(domain: "VLRService", code: httpResponse.statusCode, userInfo: [
+                NSLocalizedDescriptionKey: errorResp?.detail ?? "Failed to fetch transactions."
+            ])
+        }
+        
+        let resp = try JSONDecoder().decode(VLRTeamTransactionsResponse.self, from: data)
+        return resp.data.segments
     }
 }

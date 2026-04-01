@@ -13,8 +13,47 @@ class VLRSearchService: ObservableObject {
     @Published var results: [VLRSearchResult] = []
     @Published var isSearching = false
     
-    // Regex matches: <a href="/search/r/(player|team|event)/([0-9]+)/..." ... <img src="([^"]*)"> ... <div class="search-item-title..."> (Title) </div> <div class="search-item-desc..."> (Subtitle) </div>
-    private let searchPattern = "<a href=\"/search/r/(player|team)/(\\d+)/[^\"]*\"[^>]*>\\s*<div class=\"search-item-thumb\">\\s*<img src=\"([^\"]*)\">\\s*</div>(?:\\s*<div style=\"[^\"]*\">)?\\s*<div class=\"search-item-title[^\"]*\">\\s*(.*?)\\s*</div>\\s*<div class=\"search-item-desc[^\"]*\">\\s*(.*?)\\s*</div>"
+    /// Statically look up a team ID from a team name by scraping VLR.gg search results.
+    /// Used when a team name is passed instead of a numeric ID (e.g., from Match Details).
+    static func lookupTeamID(name: String) async -> String? {
+        let encodedQuery = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
+        guard let url = URL(string: "https://www.vlr.gg/search/?q=\(encodedQuery)") else { return nil }
+        
+        var request = URLRequest(url: url)
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
+        
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200,
+              let htmlString = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        
+        let pattern = "<a href=\"/search/r/team/(\\d+)/[^\"]*\"[^>]*>.*?<div class=\"search-item-title[^\"]*\">\\s*(.*?)\\s*</div>"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else { return nil }
+        
+        let nsString = htmlString as NSString
+        let matches = regex.matches(in: htmlString, range: NSRange(location: 0, length: nsString.length))
+        
+        for match in matches {
+            guard match.numberOfRanges >= 3 else { continue }
+            let foundID = nsString.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let foundTitle = nsString.substring(with: match.range(at: 2)).trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            if foundTitle.lowercased() == name.lowercased() {
+                return foundID
+            }
+        }
+        
+        // Fallback: return the very first team ID we found
+        if let firstMatch = matches.first, firstMatch.numberOfRanges >= 2 {
+            return nsString.substring(with: firstMatch.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        
+        return nil
+    }
+    
+    // Improved regex to handle VLR's current HTML structure more robustly
+    private let searchPattern = "<a href=\"/search/r/(player|team)/(\\d+)/[^\"]*\"[^>]*>.*?<div class=\"search-item-thumb\">.*?<img src=\"([^\"]*)\">.*?<div class=\"search-item-title[^\"]*\">\\s*(.*?)\\s*</div>\\s*<div class=\"search-item-desc[^\"]*\">\\s*(.*?)\\s*</div>"
     
     private var currentTask: Task<Void, Never>?
     
@@ -29,7 +68,7 @@ class VLRSearchService: ObservableObject {
         currentTask?.cancel()
         
         currentTask = Task {
-            // Debounce delay to prevent sending a request on every single keystroke.
+            // Debounce delay
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled else { return }
             
@@ -97,13 +136,12 @@ class VLRSearchService: ObservableObject {
             let title = nsString.substring(with: match.range(at: 4))
                 .replacingOccurrences(of: "\n", with: "")
                 .replacingOccurrences(of: "\t", with: "")
-                .replacingOccurrences(of: "<span style=\"font-weight:400; font-size: 12px; color: #888;\">(inactive )</span>", with: "inactive")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             
             let desc = nsString.substring(with: match.range(at: 5))
                 .replacingOccurrences(of: "\n", with: "")
                 .replacingOccurrences(of: "\t", with: "")
-                .replacingOccurrences(of: "<span style=\"font-weight:400; font-size: 12px; color: #888;\">(inactive )</span>", with: "inactive")
+                .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression) // Strip nested HTML tags like <span>
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             
             let result = VLRSearchResult(

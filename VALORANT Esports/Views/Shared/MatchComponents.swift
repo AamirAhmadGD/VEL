@@ -105,13 +105,11 @@ struct TeamLogoImage: View {
     let fallbackFlagURL: URL?
 
     @State private var logoURLString: String? = nil
-    @State private var isFetching: Bool = true
+    @State private var hasFetched: Bool = false
 
     var body: some View {
         ZStack {
-            if isFetching {
-                ProgressView().frame(width: 54, height: 54)
-            } else if let urlStr = logoURLString, let url = URL(string: urlStr) {
+            if let urlStr = logoURLString, let url = URL(string: urlStr) {
                 AsyncImage(url: url) { image in
                     image.resizable()
                         .aspectRatio(contentMode: .fit)
@@ -119,12 +117,13 @@ struct TeamLogoImage: View {
                         .clipShape(Circle())
                         .shadow(color: .white.opacity(0.35), radius: 8)
                 } placeholder: {
-                    ProgressView()
+                    Circle().fill(Color.white.opacity(0.05)).frame(width: 54, height: 54)
                 }
                 .frame(width: 54, height: 54)
                 .background(Circle().fill(Color.white.opacity(0.05)))
                 .overlay(Circle().stroke(Color.white.opacity(0.15), lineWidth: 1.5))
-            } else {
+            } else if hasFetched {
+                // Fallback to flag if fetched but no logo found
                 AsyncImage(url: fallbackFlagURL) { phase in
                     switch phase {
                     case .success(let image):
@@ -136,17 +135,18 @@ struct TeamLogoImage: View {
                             .frame(width: 54, height: 54)
                             .background(Circle().fill(Color.white.opacity(0.05)))
                             .overlay(Circle().stroke(Color.white.opacity(0.15), lineWidth: 1.5))
-                    case .failure, .empty:
-                        fallbackIcon
-                    @unknown default:
+                    default:
                         fallbackIcon
                     }
                 }
+            } else {
+                // Just the circle while we check the actor
+                fallbackIcon
             }
         }
         .task {
             logoURLString = await TeamLogoCache.shared.getLogo(for: teamName, matchID: matchID)
-            isFetching = false
+            hasFetched = true
         }
     }
 

@@ -27,7 +27,10 @@ struct VALORANT_EsportsApp: App {
         tabAppearance.stackedLayoutAppearance.normal.iconColor = .white.withAlphaComponent(0.5)
         tabAppearance.stackedLayoutAppearance.normal.titleTextAttributes = [.foregroundColor: UIColor.white.withAlphaComponent(0.5)]
         
-        // Let the accentColor/tint override the selected state
+        // Set selected item color to VLR red explicitly
+        let vlrRed = UIColor(red: 0.9, green: 0.2, blue: 0.2, alpha: 1.0)
+        tabAppearance.stackedLayoutAppearance.selected.iconColor = vlrRed
+        tabAppearance.stackedLayoutAppearance.selected.titleTextAttributes = [.foregroundColor: vlrRed]
         
         UITabBar.appearance().standardAppearance = tabAppearance
         UITabBar.appearance().scrollEdgeAppearance = tabAppearance

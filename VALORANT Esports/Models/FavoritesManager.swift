@@ -48,6 +48,13 @@ final class FavoritesManager: ObservableObject {
             var newResult = result
             newResult.isFavorited = true
             favoriteTeams.append(newResult)
+            
+            // Persist the favorite team's logo permanently for instant offline loading
+            if let imageURL = result.imageURL {
+                Task {
+                    await TeamLogoCache.shared.saveLogo(for: result.title, url: imageURL.absoluteString)
+                }
+            }
         }
     }
     

@@ -466,33 +466,21 @@ struct MatchDetailView: View {
 
                     // Player rows
                     ForEach(Array(displayedPlayers.enumerated()), id: \.element.id) { idx, player in
-                        NavigationLink(destination: PlayerDetailView(playerID: player.name, fakeName: player.name, imageURL: nil)) {
-                            HStack(spacing: 6) {
-                                RoundedRectangle(cornerRadius: 1.5)
-                                    .fill(teamColor(for: player))
-                                    .frame(width: 3, height: 28)
-
-                                VStack(alignment: .leading, spacing: 1) {
-                                    HStack(spacing: 3) {
-                                        if favoritesManager.isFavorite(name: player.name) {
-                                            Image(systemName: "star.fill").font(.system(size: 8)).foregroundStyle(.yellow)
-                                        }
-                                        Text(player.name)
-                                            .font(.system(size: 13, weight: .bold))
-                                            .foregroundStyle(favoritesManager.isFavorite(name: player.name) ? .yellow : .white)
-                                            .lineLimit(1)
-                                    }
-                                    Text(teamTag(for: player))
-                                        .font(.system(size: 9, weight: .medium))
-                                        .foregroundStyle(.white.opacity(0.35))
-                                        .lineLimit(1)
+                        let rawID = player.player_id ?? ""
+                        let isNumeric = !rawID.isEmpty && rawID.allSatisfy { $0.isNumber }
+                        
+                        Group {
+                            if isNumeric {
+                                NavigationLink(destination: PlayerDetailView(playerID: rawID, fakeName: player.name, imageURL: nil)) {
+                                    playerRow(viewPlayer: player)
                                 }
+                            } else {
+                                playerRow(viewPlayer: player)
+                                    .opacity(0.8)
                             }
-                            .frame(width: 110, height: 48, alignment: .leading)
-                            .background(idx % 2 == 0 ? Color.white.opacity(0.02) : Color.clear)
                         }
-                        .buttonStyle(PlainButtonStyle())
-
+                        .background(idx % 2 == 0 ? Color.white.opacity(0.02) : Color.clear)
+                        
                         if teamFilter == .all, idx < displayedPlayers.count - 1, displayedPlayers[idx].teamIndex != displayedPlayers[idx + 1].teamIndex {
                             Divider().background(Color.white.opacity(0.15)).padding(.vertical, 4)
                         }
@@ -765,6 +753,40 @@ struct MatchDetailView: View {
             }
         }
     }
+
+    private func playerRow(viewPlayer: some VLRMatchPlayerProtocol) -> some View {
+        HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(teamColor(for: viewPlayer))
+                .frame(width: 3, height: 28)
+
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 3) {
+                    if favoritesManager.isFavorite(name: viewPlayer.name) {
+                        Image(systemName: "star.fill").font(.system(size: 8)).foregroundStyle(.yellow)
+                    }
+                    Text(viewPlayer.name)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                }
+                
+                if let agent = viewPlayer.agent, !agent.isEmpty {
+                    Text(agent.uppercased())
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.4))
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.leading, 12)
+        .frame(width: 110, alignment: .leading)
+    }
+
+    private func teamColor(for player: some VLRMatchPlayerProtocol) -> Color {
+        player.teamIndex == 1 ? Color(red: 0.3, green: 0.5, blue: 0.9) : Color(red: 0.9, green: 0.3, blue: 0.3)
+    }
 }
 
 // MARK: - Map Chip
@@ -867,4 +889,20 @@ private extension String {
         ))
         .environmentObject(FavoritesManager.shared)
     }
+}
+
+// MARK: - Protocols & Extensions
+
+protocol VLRMatchPlayerProtocol {
+    var name: String { get }
+    var agent: String? { get }
+    var player_id: String? { get }
+    var teamIndex: Int { get }
+}
+
+extension AggregatedPlayerStat: VLRMatchPlayerProtocol {
+    var agent: String? { nil }
+}
+extension VLRMatchDetailPlayer: VLRMatchPlayerProtocol {
+    var teamIndex: Int { 0 } // Not used for map-specific view in a way that respects this dummy value
 }

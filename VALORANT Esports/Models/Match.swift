@@ -6,6 +6,8 @@
 //
 
 import Foundation
+import SwiftUI
+import Combine
 
 // MARK: - Match List Response Models (v2/match)
 
@@ -233,6 +235,10 @@ struct VLRMatchDetailSegment: Codable, Sendable {
                     existing.hsPctSum += hsPct
                     existing.fk += fk
                     existing.fd += fd
+                    // Preserve or update the ID if we didn't have one before
+                    if existing.player_id == nil || existing.player_id == "" {
+                        existing.player_id = player.player_id
+                    }
                     dict[player.name] = existing
                 } else {
                     dict[player.name] = AggregatedPlayerStat(
@@ -248,7 +254,8 @@ struct VLRMatchDetailSegment: Codable, Sendable {
                         adr: adr,
                         hsPctSum: hsPct,
                         fk: fk,
-                        fd: fd
+                        fd: fd,
+                        player_id: player.player_id
                     )
                 }
             }
@@ -334,7 +341,9 @@ struct VLRMatchDetailMapPlayers: Codable, Sendable {
     let team2: [VLRMatchDetailPlayer]?
 }
 
-struct VLRMatchDetailPlayer: Codable, Sendable {
+struct VLRMatchDetailPlayer: Codable, Sendable, Identifiable {
+    var id: String { (player_id != nil && !player_id!.isEmpty) ? player_id! : name }
+    let player_id: String?
     let name: String
     let agent: String?
     let rating: String
@@ -394,6 +403,7 @@ struct AggregatedPlayerStat: Identifiable, Sendable {
     var hsPctSum: Double
     var fk: Int
     var fd: Int
+    var player_id: String?
 
     var avgRating: Double { mapCount > 0 ? ratingSum / Double(mapCount) : 0 }
     var avgKAST: Double   { mapCount > 0 ? kastSum  / Double(mapCount) : 0 }
