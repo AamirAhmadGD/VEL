@@ -17,6 +17,13 @@ struct StandardMatchCard: View {
     let accentColor: Color
     var isLive: Bool = false
     @EnvironmentObject private var favoritesManager: FavoritesManager
+    @AppStorage("spoilerProtectionEnabled") private var spoilerProtectionEnabled = false
+    @State private var isRevealed = false
+
+    var isHiddenSpoiler: Bool {
+        // Blur if spoiler protection is enabled AND (match is live OR match is completed) AND not revealed
+        spoilerProtectionEnabled && (isLive || match.time_completed != nil) && !isRevealed
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -56,6 +63,22 @@ struct StandardMatchCard: View {
                         .font(.system(size: isHighscore ? 24 : 32, weight: .black, design: .default))
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
+                        .blur(radius: isHiddenSpoiler ? 10 : 0)
+                        .opacity(isHiddenSpoiler ? 0.7 : 1.0)
+                        .overlay {
+                            if isHiddenSpoiler {
+                                Image(systemName: "eye.fill")
+                                    .font(.system(size: 18))
+                                    .foregroundStyle(.white)
+                                    .shadow(radius: 2)
+                            }
+                        }
+                        .onTapGesture {
+                            if isHiddenSpoiler {
+                                // If they tap the score itself, reveal it
+                                withAnimation { isRevealed = true }
+                            }
+                        }
                     } else {
                         Text("VS")
                             .font(.system(size: 24, weight: .black, design: .default))
@@ -144,7 +167,11 @@ struct TeamLogoImage: View {
                 fallbackIcon
             }
         }
-        .task {
+        .task(id: matchID + teamName) {
+            // Reset state so recycled views don't carry old cell logos
+            logoURLString = nil
+            hasFetched = false
+            
             logoURLString = await TeamLogoCache.shared.getLogo(for: teamName, matchID: matchID)
             hasFetched = true
         }

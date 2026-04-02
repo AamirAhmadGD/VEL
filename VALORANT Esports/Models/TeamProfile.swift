@@ -2,6 +2,8 @@
 //  TeamProfile.swift
 //  VALORANT Esports
 //
+//  Created by Aamir Ahmad on 3/14/26.
+//
 
 import Foundation
 
@@ -14,7 +16,7 @@ struct VLRTeamData: Codable {
     let segments: [VLRTeamProfile]
 }
 
-struct VLRTeamProfile: Codable {
+struct VLRTeamProfile: Codable, Sendable {
     let id: String
     let name: String
     let tag: String?
@@ -27,7 +29,7 @@ struct VLRTeamProfile: Codable {
     let total_winnings: String?
 }
 
-struct VLRTeamPlayer: Codable, Identifiable {
+struct VLRTeamPlayer: Codable, Identifiable, Sendable {
     var id: String { player_id ?? name }
     let player_id: String?
     let name: String
@@ -44,38 +46,51 @@ struct VLRTeamPlayer: Codable, Identifiable {
     }
 }
 
-struct VLRTeamEventPlacement: Codable, Identifiable {
-    var id: String { event + date }
+struct VLRTeamEventPlacement: Codable, Identifiable, Sendable {
+    var id: String { event + (date ?? "") }
     let event: String
-    let placement: String
-    let prize: String
-    let date: String
+    let placement: String?
+    let prize: String?
+    let date: String?
+
+    /// Returns just the tournament name, stripping stage suffixes like "Main Event-", "Qualifier-" etc.
+    var displayEvent: String {
+        var name = event
+        // Strip trailing stage/round suffixes
+        let stagePattern = #"(?i)\s*(Main Event|Qualifier|Playoffs?|Group Stage|Split\s*\d*)\s*[-–]*$"#
+        if let range = name.range(of: stagePattern, options: .regularExpression) {
+            name = String(name[..<range.lowerBound])
+        }
+        // Strip any remaining trailing dash/en-dash
+        name = name.replacingOccurrences(of: #"[-–]+$"#, with: "", options: .regularExpression)
+        return name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
-struct VLRTeamNews: Codable, Identifiable {
+struct VLRTeamNews: Codable, Identifiable, Sendable {
     var id: String { url }
     let title: String
     let url: String
     let date: String
 }
 
-struct VLRTeamTransactionsResponse: Codable {
+struct VLRTeamTransactionsResponse: Codable, Sendable {
     let status: String
     let data: VLRTeamTransactionsData
 }
 
-struct VLRTeamTransactionsData: Codable {
+struct VLRTeamTransactionsData: Codable, Sendable {
     let status: Int
     let segments: [VLRTeamTransaction]
 }
 
-struct VLRTeamTransactionPlayer: Codable {
+struct VLRTeamTransactionPlayer: Codable, Sendable {
     let name: String?
     let id: String?
     let url: String?
 }
 
-struct VLRTeamTransaction: Codable, Identifiable {
+struct VLRTeamTransaction: Codable, Identifiable, Sendable {
     var id: String { date + displayPlayerName + displayAction }
     let date: String
     let action: String?

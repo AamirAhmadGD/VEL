@@ -142,7 +142,7 @@ struct EventDetailView: View {
         .task {
             if let numericID = event.numericID {
                 isLoading = true
-                self.matches = await service.fetchMatchesForEvent(eventID: numericID, page: 1)
+                self.matches = await service.fetchMatchesForEvent(eventID: numericID, eventName: event.title)
                 isLoading = false
             }
         }
@@ -153,7 +153,7 @@ struct EventDetailView: View {
         isLoadingMore = true
         let nextPage = currentPage + 1
         
-        let newMatches = await service.fetchMatchesForEvent(eventID: numericID, page: nextPage)
+        let newMatches = await service.fetchMatchesForEvent(eventID: numericID, eventName: event.title)
         
         if newMatches.isEmpty {
             hasMoreMatches = false

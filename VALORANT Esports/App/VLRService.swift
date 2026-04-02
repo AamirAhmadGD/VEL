@@ -22,8 +22,13 @@ struct VLRAPIErrorResponse: Codable {
 final class VLRService: ObservableObject {
     
     static let shared = VLRService()
-    // Using local API server since vlrggapi.vercel.app is down due to limits
-    private let baseURL = "http://127.0.0.1:3001"
+    
+    /// The base URL determined by the environment (Simulator vs Device)
+    private var baseURL: String { AppEnvironment.apiBaseURL }
+    
+    /// Tracks if the API is currently considered available.
+    /// If false, we default to Standalone (Scraping) mode.
+    @Published var isAPIAvailable = true
     
     // MARK: - Events State
     @Published var ongoingEvents: [VLREvent] = []
@@ -47,7 +52,30 @@ final class VLRService: ObservableObject {
     /// How many events to release per user-visible "page"
     private let chunkSize = 30
     
-    private init() {}
+    private init() {
+        Task {
+            self.isAPIAvailable = await AppEnvironment.isAPIAvailable()
+        }
+    }
+    
+    // MARK: - Generic API Fetcher
+    
+    private func fetchFromAPI<T: Codable>(endpoint: String) async throws -> T {
+        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+            throw URLError(.badURL)
+        }
+        
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10.0
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw URLError(.badServerResponse)
+        }
+        
+        return try JSONDecoder().decode(T.self, from: data)
+    }
     
     // MARK: - Current Events (v2)
     
@@ -55,19 +83,30 @@ final class VLRService: ObservableObject {
         isLoadingEvents = true
         eventsError = nil
         
-        do {
-            let url = URL(string: "\(baseURL)/v2/events?status=ongoing")!
-            let (data, _) = try await URLSession.shared.data(from: url)
-            let response = try JSONDecoder().decode(VLREventsResponse.self, from: data)
-            let all = response.data.segments
-            
-            ongoingEvents   = all.filter { $0.status == "ongoing" }
-            upcomingEvents  = all.filter { $0.status == "upcoming" }
-            completedEvents = all.filter { $0.status == "completed" }
-            
-        } catch {
-            eventsError = error.localizedDescription
+        // 1. Try API first
+        if isAPIAvailable {
+            do {
+                let response: VLREventsResponse = try await fetchFromAPI(endpoint: "/v2/events?q=upcoming")
+                let all = response.data.segments
+                
+                ongoingEvents   = all.filter { $0.status == "ongoing" }
+                upcomingEvents  = all.filter { $0.status == "upcoming" }
+                completedEvents = all.filter { $0.status == "completed" }
+                
+                isLoadingEvents = false
+                return
+            } catch {
+                print("API fetchEvents failed, falling back to scraper: \(error)")
+                self.isAPIAvailable = false // Mark as unavailable for this session/run
+            }
         }
+        
+        // 2. Fallback to Scraper (Standalone Mode)
+        let all = await VLRScraperService.shared.scrapeEvents()
+        
+        ongoingEvents   = all.filter { $0.status == "ongoing" }
+        upcomingEvents  = all.filter { $0.status == "upcoming" }
+        completedEvents = all.filter { $0.status == "completed" }
         
         isLoadingEvents = false
     }
@@ -82,35 +121,46 @@ final class VLRService: ObservableObject {
         isLoadingPastPage = true
         pastEventsError = nil
         
-        // Refill buffer from the API if needed
-        if pendingBuffer.isEmpty {
+        // 1. Try API first
+        if isAPIAvailable {
             do {
-                guard let url = URL(string: "\(baseURL)/events?q=completed&page=\(nextAPIPage)") else {
-                    isLoadingPastPage = false
-                    return
-                }
-                let (data, _) = try await URLSession.shared.data(from: url)
-                let response = try JSONDecoder().decode(VLREventsV1Response.self, from: data)
+                let response: VLREventsResponse = try await fetchFromAPI(endpoint: "/v2/events?q=completed&page=\(nextAPIPage)")
                 let events = response.data.segments
-                
-                fetchedAPIPages.insert(nextAPIPage)
-                nextAPIPage += 1
                 
                 if events.isEmpty {
                     hasMorePastPages = false
-                    isLoadingPastPage = false
-                    return
+                } else {
+                    let existingIDs = Set(pastEvents.map { $0.urlPath })
+                    let filtered = events.filter { !existingIDs.contains($0.urlPath) }
+                    pastEvents.append(contentsOf: filtered)
+                    nextAPIPage += 1
                 }
                 
-                // Deduplicate against what's already displayed
-                let existingIDs = Set(pastEvents.map { $0.urlPath })
-                pendingBuffer = events.filter { !existingIDs.contains($0.urlPath) }
-                
+                isLoadingPastPage = false
+                return
             } catch {
-                pastEventsError = error.localizedDescription
+                print("API loadNextPastChunk failed: \(error)")
+                // Don't mark API as unavailable here yet, it might just be a timeout
+            }
+        }
+        
+        // 2. Fallback to Scraper
+        // Refill buffer from the API if needed
+        if pendingBuffer.isEmpty {
+            let events = await VLRScraperService.shared.scrapePastEvents(page: nextAPIPage)
+            
+            fetchedAPIPages.insert(nextAPIPage)
+            nextAPIPage += 1
+            
+            if events.isEmpty {
+                hasMorePastPages = false
                 isLoadingPastPage = false
                 return
             }
+            
+            // Deduplicate against what's already displayed
+            let existingIDs = Set(pastEvents.map { $0.urlPath })
+            pendingBuffer = events.filter { !existingIDs.contains($0.urlPath) }
         }
         
         // Release a chunk from the buffer
@@ -145,81 +195,61 @@ final class VLRService: ObservableObject {
         isLoadingMatches = true
         matchesError = nil
         
-        async let liveReq: () = {
-            if let url = URL(string: "\(self.baseURL)/v2/match?q=live_score") {
-                if let (data, _) = try? await URLSession.shared.data(from: url) {
-                    if let response = try? await MainActor.run(resultType: VLRMatchResponse.self, body: { try JSONDecoder().decode(VLRMatchResponse.self, from: data) }) {
-                        await MainActor.run { self.liveMatches = response.data.segments }
-                    }
-                }
+        if isAPIAvailable {
+            do {
+                async let liveRes: VLRMatchResponse = fetchFromAPI(endpoint: "/v2/match?q=live_score")
+                async let upcomingRes: VLRMatchResponse = fetchFromAPI(endpoint: "/v2/match?q=upcoming")
+                
+                let live = try await liveRes
+                let upcoming = try await upcomingRes
+                
+                self.liveMatches = live.data.segments
+                self.upcomingMatches = upcoming.data.segments
+                
+                isLoadingMatches = false
+                return
+            } catch {
+                print("API fetchMatches failed: \(error)")
             }
-        }()
+        }
         
-        async let upcomingReq: () = {
-            if let url = URL(string: "\(self.baseURL)/v2/match?q=upcoming") {
-                if let (data, _) = try? await URLSession.shared.data(from: url) {
-                    if let response = try? await MainActor.run(resultType: VLRMatchResponse.self, body: { try JSONDecoder().decode(VLRMatchResponse.self, from: data) }) {
-                        await MainActor.run { self.upcomingMatches = response.data.segments }
-                    }
-                }
-            }
-        }()
+        // Fallback
+        async let live = VLRScraperService.shared.scrapeLiveMatches()
+        async let upcoming = VLRScraperService.shared.scrapeUpcomingMatches()
         
-        _ = await (liveReq, upcomingReq)
+        self.liveMatches = await live
+        self.upcomingMatches = await upcoming
+        
         isLoadingMatches = false
     }
     
     // Silent background poll to keep scores updated
     func fetchLiveMatchesOnly() async {
-        if let url = URL(string: "\(self.baseURL)/v2/match?q=live_score") {
-            if let (data, _) = try? await URLSession.shared.data(from: url) {
-                if let response = try? await MainActor.run(resultType: VLRMatchResponse.self, body: { try JSONDecoder().decode(VLRMatchResponse.self, from: data) }) {
-                    await MainActor.run { self.liveMatches = response.data.segments }
-                }
-            }
-        }
+        self.liveMatches = await VLRScraperService.shared.scrapeLiveMatches()
     }
 
     // Silent background poll to keep upcoming and recent past matches updated (time left/ago)
     func refreshUpcomingAndPastMatches() async {
-        async let upcomingReq: () = {
-            if let url = URL(string: "\(self.baseURL)/v2/match?q=upcoming") {
-                if let (data, _) = try? await URLSession.shared.data(from: url) {
-                    if let response = try? await MainActor.run(resultType: VLRMatchResponse.self, body: { try JSONDecoder().decode(VLRMatchResponse.self, from: data) }) {
-                        await MainActor.run { self.upcomingMatches = response.data.segments }
-                    }
+        async let upcoming = VLRScraperService.shared.scrapeUpcomingMatches()
+        async let past = VLRScraperService.shared.scrapeMatchResults(page: 1)
+        
+        self.upcomingMatches = await upcoming
+        let newPast = await past
+        
+        if self.pastMatches.isEmpty {
+            self.pastMatches = newPast
+        } else {
+            // Update existing or prepending new results
+            var updated = self.pastMatches
+            for newMatch in newPast.reversed() {
+                if let idx = updated.firstIndex(where: { $0.match_page == newMatch.match_page }) {
+                    updated[idx] = newMatch
+                } else {
+                    updated.insert(newMatch, at: 0)
                 }
             }
-        }()
-        
-        async let pastReq: () = {
-            // Only fetch page 1 so we don't load huge amounts of data in the background
-            if let url = URL(string: "\(self.baseURL)/v2/match?q=results&from_page=1&to_page=1") {
-                if let (data, _) = try? await URLSession.shared.data(from: url) {
-                    if let response = try? await MainActor.run(resultType: VLRMatchResponse.self, body: { try JSONDecoder().decode(VLRMatchResponse.self, from: data) }) {
-                        await MainActor.run {
-                            let newMatches = response.data.segments
-                            var updated = self.pastMatches
-                            if updated.isEmpty {
-                                self.pastMatches = newMatches
-                                return
-                            }
-                            
-                            for newMatch in newMatches.reversed() {
-                                if let idx = updated.firstIndex(where: { $0.numeric_id == newMatch.numeric_id }) {
-                                    updated[idx] = newMatch
-                                } else {
-                                    updated.insert(newMatch, at: 0)
-                                }
-                            }
-                            self.pastMatches = updated
-                        }
-                    }
-                }
-            }
-        }()
-        
-        _ = await (upcomingReq, pastReq)
+            self.pastMatches = updated
+        }
     }
 
     
@@ -231,42 +261,38 @@ final class VLRService: ObservableObject {
         isLoadingPastMatchPage = true
         pastMatchesError = nil
         
-        // Refill buffer from the API if needed
-        if pendingMatchBuffer.isEmpty {
+        if isAPIAvailable {
             do {
-                guard let url = URL(string: "\(baseURL)/v2/match?q=results&from_page=\(nextAPIMatchPage)&to_page=\(nextAPIMatchPage + 4)") else {
-                    isLoadingPastMatchPage = false
-                    return
-                }
-                let (data, _) = try await URLSession.shared.data(from: url)
-                let response = try await MainActor.run { try JSONDecoder().decode(VLRMatchResponse.self, from: data) }
+                let response: VLRMatchResponse = try await fetchFromAPI(endpoint: "/v2/match?q=results&page=\(nextAPIMatchPage)")
                 let matches = response.data.segments
-                
-                fetchedAPIMatchPages.insert(nextAPIMatchPage)
-                nextAPIMatchPage += 5 // Fast forward 5 pages
                 
                 if matches.isEmpty {
                     hasMorePastMatchPages = false
-                    isLoadingPastMatchPage = false
-                    return
+                } else {
+                    let existingPaths = Set(pastMatches.map { $0.match_page })
+                    let filtered = matches.filter { !existingPaths.contains($0.match_page) }
+                    pastMatches.append(contentsOf: filtered)
+                    nextAPIMatchPage += 1
                 }
                 
-                // Deduplicate against what's already displayed
-                let existingIDs = Set(pastMatches.map { $0.match_page })
-                pendingMatchBuffer = matches.filter { !existingIDs.contains($0.match_page) }
-                
-            } catch {
-                pastMatchesError = error.localizedDescription
                 isLoadingPastMatchPage = false
                 return
+            } catch {
+                print("API loadNextPastMatchChunk failed: \(error)")
             }
         }
         
-        // Release a chunk of 150 from the buffer to test lag
-        let count = min(150, pendingMatchBuffer.count)
-        let chunk = Array(pendingMatchBuffer.prefix(count))
-        pendingMatchBuffer.removeFirst(count)
-        pastMatches.append(contentsOf: chunk)
+        let matches = await VLRScraperService.shared.scrapeMatchResults(page: nextAPIMatchPage)
+        
+        if matches.isEmpty {
+            hasMorePastMatchPages = false
+        } else {
+            // Deduplicate
+            let existingPaths = Set(pastMatches.map { $0.match_page })
+            let filtered = matches.filter { !existingPaths.contains($0.match_page) }
+            pastMatches.append(contentsOf: filtered)
+            nextAPIMatchPage += 1
+        }
         
         isLoadingPastMatchPage = false
     }
@@ -275,97 +301,77 @@ final class VLRService: ObservableObject {
 
     /// Fetches full match detail from v2/match/details. Returns nil on failure.
     func fetchMatchDetails(matchID: String) async -> VLRMatchDetailSegment? {
-        guard let url = URL(string: "\(baseURL)/v2/match/details?match_id=\(matchID)") else { return nil }
-        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
-        return try? await MainActor.run {
-            try JSONDecoder().decode(VLRMatchDetailResponse.self, from: data).data.segments.first
+        if isAPIAvailable {
+            do {
+                let response: VLRMatchDetailResponse = try await fetchFromAPI(endpoint: "/v2/match/details?match_id=\(matchID)")
+                return response.data.segments.first
+            } catch {
+                print("API fetchMatchDetails failed: \(error)")
+            }
         }
+        return await VLRScraperService.shared.scrapeMatchDetails(matchID: matchID)
     }
     
     /// Fetches all matches for a specific event using the dedicated event matches endpoint.
-    func fetchMatchesForEvent(eventID: String, page: Int = 1) async -> [VLRMatch] {
-        guard let url = URL(string: "\(self.baseURL)/events/matches?event_id=\(eventID)&page=\(page)") else { return [] }
-        
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            let response = try JSONDecoder().decode(VLREventMatchResponse.self, from: data)
-            return response.data.segments.map { VLRMatch(from: $0) }
-        } catch {
-            print("Error fetching event matches (page \(page)): \(error)")
-            return []
+    func fetchMatchesForEvent(eventID: String, eventName: String? = nil) async -> [VLRMatch] {
+        if isAPIAvailable {
+            do {
+                let response: VLREventMatchResponse = try await fetchFromAPI(endpoint: "/v2/events/matches?event_id=\(eventID)")
+                return response.data.segments.map { VLRMatch(from: $0, eventName: eventName) }
+            } catch {
+                print("API fetchMatchesForEvent failed: \(error)")
+            }
         }
+        return await VLRScraperService.shared.scrapeMatchesForEvent(eventID: eventID, eventName: eventName)
     }
     
     // MARK: - Player Profile
     
     func fetchPlayerProfile(id: String) async throws -> VLRPlayerProfile {
-        let url = URL(string: "\(baseURL)/v2/player?id=\(id)")!
-        let (data, response) = try await URLSession.shared.data(from: url)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
+        if isAPIAvailable {
+            do {
+                let response: VLRPlayerResponse = try await fetchFromAPI(endpoint: "/v2/player?id=\(id)")
+                return response.data.segments.first!
+            } catch {
+                print("API fetchPlayerProfile failed: \(error)")
+            }
         }
         
-        if httpResponse.statusCode != 200 {
-            let errorResp = try? JSONDecoder().decode(VLRAPIErrorResponse.self, from: data)
-            throw NSError(domain: "VLRService", code: httpResponse.statusCode, userInfo: [
-                NSLocalizedDescriptionKey: errorResp?.detail ?? "Failed to fetch player profile."
-            ])
+        guard let profile = await VLRScraperService.shared.scrapePlayerProfile(id: id) else {
+            throw NSError(domain: "VLRService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Failed to scrape player profile."])
         }
-        
-        let decoder = JSONDecoder()
-        let resp = try decoder.decode(VLRPlayerResponse.self, from: data)
-        guard let profile = resp.data.segments.first else {
-            throw NSError(domain: "VLRService", code: 404, userInfo: [
-                NSLocalizedDescriptionKey: "Player profile not found"
-            ])
-        }
-        
         return profile
     }
     
     // MARK: - Team Profile
     
     func fetchTeamProfile(id: String) async throws -> VLRTeamProfile {
-        let url = URL(string: "\(baseURL)/v2/team?id=\(id)")!
-        let (data, response) = try await URLSession.shared.data(from: url)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
+        if isAPIAvailable {
+            do {
+                let response: VLRTeamResponse = try await fetchFromAPI(endpoint: "/v2/team?id=\(id)")
+                return response.data.segments.first!
+            } catch {
+                print("API fetchTeamProfile failed: \(error)")
+            }
         }
         
-        if httpResponse.statusCode != 200 {
-            let errorResp = try? JSONDecoder().decode(VLRAPIErrorResponse.self, from: data)
-            throw NSError(domain: "VLRService", code: httpResponse.statusCode, userInfo: [
-                NSLocalizedDescriptionKey: errorResp?.detail ?? "Failed to fetch team profile."
-            ])
-        }
-        
-        let resp = try JSONDecoder().decode(VLRTeamResponse.self, from: data)
-        guard let profile = resp.data.segments.first else {
-            throw NSError(domain: "VLRService", code: 404, userInfo: [
-                NSLocalizedDescriptionKey: "Team profile not found"
-            ])
+        guard let profile = await VLRScraperService.shared.scrapeTeamProfile(id: id) else {
+            throw NSError(domain: "VLRService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Failed to scrape team profile."])
         }
         return profile
     }
     
     func fetchTeamTransactions(id: String) async throws -> [VLRTeamTransaction] {
-        let url = URL(string: "\(baseURL)/v2/team/transactions?id=\(id)")!
-        let (data, response) = try await URLSession.shared.data(from: url)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
+        if isAPIAvailable {
+            do {
+                let response: VLRTeamTransactionsResponse = try await fetchFromAPI(endpoint: "/v2/team/transactions?id=\(id)")
+                return response.data.segments
+            } catch {
+                print("API fetchTeamTransactions failed: \(error)")
+            }
         }
-        
-        if httpResponse.statusCode != 200 {
-            let errorResp = try? JSONDecoder().decode(VLRAPIErrorResponse.self, from: data)
-            throw NSError(domain: "VLRService", code: httpResponse.statusCode, userInfo: [
-                NSLocalizedDescriptionKey: errorResp?.detail ?? "Failed to fetch transactions."
-            ])
-        }
-        
-        let resp = try JSONDecoder().decode(VLRTeamTransactionsResponse.self, from: data)
-        return resp.data.segments
+        // Transactions are currently omitted for standalone mode to simplify initial port.
+        // Can be added later if needed.
+        return []
     }
 }

@@ -68,6 +68,13 @@ struct HomeView: View {
                                         .background(.white.opacity(0.1))
                                         .clipShape(Capsule())
                                     }
+
+                                    NavigationLink(destination: SettingsView()) {
+                                        Image(systemName: "gearshape.fill")
+                                            .font(.system(size: 20))
+                                            .foregroundStyle(.white.opacity(0.8))
+                                            .padding(.leading, 8)
+                                    }
                                 }
 
                                 if service.isLoadingMatches && service.liveMatches.isEmpty && service.upcomingMatches.isEmpty {

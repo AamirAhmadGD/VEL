@@ -31,6 +31,16 @@ struct PlayersView: View {
                 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
+                        
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text("Players")
+                                .font(.system(size: 34, weight: .bold))
+                                .foregroundStyle(.white)
+                            
+                            GlassSearchBar(text: $searchText, placeholder: "Search Players & Teams")
+                                .padding(.bottom, 6)
+                        }
+                        .padding(.horizontal)
 
                         if searchText.isEmpty {
                             // SHOW FAVORITES WHEN NOT SEARCHING
@@ -141,13 +151,10 @@ struct PlayersView: View {
                     .padding(.vertical, 4)
                 }
             }
-            .navigationTitle("Players")
-            .navigationBarTitleDisplayMode(.large)
-            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search Players & Teams")
+            .toolbar(.hidden)
             .onChange(of: searchText) { oldValue, newValue in
                 searchService.search(query: newValue)
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
             .preferredColorScheme(.dark)
         }
     }

@@ -123,7 +123,7 @@ struct VLREventMatchVOD: Codable, Sendable {
 }
 
 extension VLRMatch {
-    init(from eventMatch: VLREventMatch) {
+    init(from eventMatch: VLREventMatch, eventName: String? = nil) {
         self.team1 = eventMatch.team1.name
         self.team2 = eventMatch.team2.name
         self.score1 = eventMatch.team1.score
@@ -149,8 +149,8 @@ extension VLRMatch {
             self.time_until_match = eventMatch.date
         }
         
-        self.match_event = nil
-        self.tournament_name = nil
+        self.match_event = eventName
+        self.tournament_name = eventName
         self.round_info = eventMatch.event_series
         self.tournament_icon = nil
         self.status = eventMatch.status

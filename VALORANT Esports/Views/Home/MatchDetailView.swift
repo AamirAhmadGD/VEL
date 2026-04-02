@@ -15,6 +15,18 @@ struct MatchDetailView: View {
     @State private var sortAscending: Bool = false
     @State private var teamFilter: TeamFilter = .all
     @EnvironmentObject private var favoritesManager: FavoritesManager
+    @AppStorage("spoilerProtectionEnabled") private var spoilerProtectionEnabled = false
+    @State private var isRevealed = false
+    @State private var isTracking = false
+    @State private var showTrackSheet = false
+    @State private var selectedMatchDate = Date().addingTimeInterval(3600)
+    @State private var liveActivityStarted = false
+    private let liveActivityManager = LiveActivityManager.shared
+
+    var isHiddenSpoiler: Bool {
+        // Blur if spoiler protection is enabled AND (match is live OR match is final) AND not revealed
+        spoilerProtectionEnabled && (segment?.isLive == true || segment?.isFinal == true) && !isRevealed
+    }
 
     // Colors
     let vlrRed = Color(red: 0.9, green: 0.2, blue: 0.2)
@@ -133,10 +145,77 @@ struct MatchDetailView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .preferredColorScheme(.dark)
-        .task { await viewModel.load() }
+        .toolbar {
+            if segment?.isLive == true {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        if liveActivityStarted {
+                            Task { await liveActivityManager.endActivity() }
+                            liveActivityStarted = false
+                        } else {
+                            liveActivityManager.startActivity(
+                                for: vlrMatch,
+                                team1LogoURL: segment?.team1?.logo,
+                                team2LogoURL: segment?.team2?.logo
+                            )
+                            liveActivityStarted = true
+                        }
+                    } label: {
+                        Image(systemName: liveActivityStarted ? "livephoto.slash" : "livephoto")
+                            .foregroundStyle(liveActivityStarted ? Color(red: 1.0, green: 0.2, blue: 0.2) : .white)
+                            .font(.system(size: 18, weight: .semibold))
+                    }
+                }
+            } else if segment?.isUpcoming == true || vlrMatch.time_completed == nil {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        if isTracking {
+                            NotificationManager.shared.cancelNotifications(for: vlrMatch.numeric_id)
+                            isTracking = false
+                        } else {
+                            Task {
+                                let notifManager = NotificationManager.shared
+                                if !notifManager.isAuthorized {
+                                    await notifManager.requestAuthorization()
+                                }
+                                if notifManager.isAuthorized {
+                                    if let dateStr = segment?.date {
+                                        notifManager.scheduleMatchNotifications(for: vlrMatch, dateString: dateStr)
+                                        isTracking = true
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: isTracking ? "bell.fill" : "bell")
+                            .foregroundStyle(isTracking ? Color(red: 1.0, green: 0.2, blue: 0.2) : .white)
+                            .font(.system(size: 18, weight: .semibold))
+                    }
+                }
+            }
+        }
+        .task { 
+            await viewModel.load()
+            // Check if this match is already tracked
+            isTracking = await NotificationManager.shared.isTracking(matchID: vlrMatch.numeric_id)
+        }
         .onReceive(viewModel.refreshTimer) { _ in
-            guard segment?.isLive ?? false else { return }
-            Task { await viewModel.refresh() }
+            guard let seg = segment, seg.isLive else { return }
+            Task {
+                await viewModel.refresh()
+                // If a live activity is running, push the fresh score
+                if liveActivityStarted, let t1 = seg.team1, let t2 = seg.team2 {
+                    let map = seg.maps?.first(where: { 
+                        ($0.score?.team1?.value ?? -1) >= 0 && ($0.score?.team2?.value ?? -1) >= 0
+                    })?.map_name ?? "Live"
+                    await liveActivityManager.updateActivity(
+                        team1Score: t1.score ?? "-",
+                        team2Score: t2.score ?? "-",
+                        currentMap: map,
+                        isFinal: seg.isFinal
+                    )
+                }
+            }
         }
     }
 
@@ -179,18 +258,24 @@ struct MatchDetailView: View {
                 if let maps = segment?.maps, !maps.isEmpty {
                     mapSelectorRow(maps: maps)
                         .padding(.vertical, 12)
+                        .blur(radius: isHiddenSpoiler ? 12 : 0)
+                        .opacity(isHiddenSpoiler ? 0.3 : 1.0)
                 }
 
                 Divider().background(Color.white.opacity(0.08))
 
                 scoreboardSection
                     .padding(.top, 16)
+                    .blur(radius: isHiddenSpoiler ? 15 : 0)
+                    .opacity(isHiddenSpoiler ? 0.3 : 1.0)
 
                 // VODs
                 if let vods = segment?.vods, !vods.isEmpty {
                     vodsSection(vods: vods)
                         .padding(.horizontal, 20)
                         .padding(.top, 24)
+                        .blur(radius: isHiddenSpoiler ? 15 : 0)
+                        .opacity(isHiddenSpoiler ? 0.3 : 1.0)
                 }
 
                 // Past Encounters
@@ -201,6 +286,33 @@ struct MatchDetailView: View {
                 }
 
                 Color.clear.frame(height: 100)
+            }
+        }
+        .overlay {
+            if isHiddenSpoiler {
+                VStack(spacing: 12) {
+                    Image(systemName: "eye.slash.fill")
+                        .font(.system(size: 32))
+                        .foregroundStyle(.white)
+                    Text("Spoiler Protected")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                    Text("Tap anywhere to reveal final results")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+                .padding(32)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 24))
+                .shadow(radius: 12)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.3)) { isRevealed = true }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black.opacity(0.1).contentShape(Rectangle()).onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.3)) { isRevealed = true }
+                })
             }
         }
     }
@@ -251,6 +363,8 @@ struct MatchDetailView: View {
                                 .font(.system(size: isHighscore ? 36 : 48, weight: .black))
                                 .foregroundStyle((t2.is_winner ?? false) ? .white : .white.opacity(0.35))
                         }
+                        .blur(radius: isHiddenSpoiler ? 12 : 0)
+                        .opacity(isHiddenSpoiler ? 0.3 : 1.0)
                     } else {
                         Text("VS")
                             .font(.system(size: 32, weight: .black))
@@ -459,8 +573,8 @@ struct MatchDetailView: View {
                     Text("PLAYER")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(.white.opacity(0.3))
-                        .frame(width: 110, alignment: .leading)
-                        .padding(.vertical, 8)
+                        .frame(width: 110, height: 32, alignment: .leading)
+                        .padding(.leading, 12)
 
                     Divider().background(Color.white.opacity(0.1))
 
@@ -482,7 +596,10 @@ struct MatchDetailView: View {
                         .background(idx % 2 == 0 ? Color.white.opacity(0.02) : Color.clear)
                         
                         if teamFilter == .all, idx < displayedPlayers.count - 1, displayedPlayers[idx].teamIndex != displayedPlayers[idx + 1].teamIndex {
-                            Divider().background(Color.white.opacity(0.15)).padding(.vertical, 4)
+                            Rectangle()
+                                .fill(Color.white.opacity(0.15))
+                                .frame(height: 1)
+                                .frame(height: 12)
                         }
                     }
                 }
@@ -513,7 +630,7 @@ struct MatchDetailView: View {
                                 .buttonStyle(PlainButtonStyle())
                             }
                         }
-                        .padding(.vertical, 8)
+                        .frame(height: 32)
 
                         Divider().background(Color.white.opacity(0.1))
 
@@ -542,7 +659,8 @@ struct MatchDetailView: View {
                             .background(idx % 2 == 0 ? Color.white.opacity(0.02) : Color.clear)
 
                             if teamFilter == .all, idx < displayedPlayers.count - 1, displayedPlayers[idx].teamIndex != displayedPlayers[idx + 1].teamIndex {
-                                Divider().opacity(0).padding(.vertical, 4) // Invisible spacer to match left column exactly
+                                Color.clear
+                                    .frame(height: 12)
                             }
                         }
                     }
@@ -779,9 +897,8 @@ struct MatchDetailView: View {
                 }
             }
         }
-        .padding(.vertical, 8)
         .padding(.leading, 12)
-        .frame(width: 110, alignment: .leading)
+        .frame(width: 110, height: 48, alignment: .leading)
     }
 
     private func teamColor(for player: some VLRMatchPlayerProtocol) -> Color {
@@ -890,6 +1007,10 @@ private extension String {
         .environmentObject(FavoritesManager.shared)
     }
 }
+
+// MARK: - Track Match Sheet
+
+// Removed TrackMatchSheet as notifications are now 1-tap toggles.
 
 // MARK: - Protocols & Extensions
 

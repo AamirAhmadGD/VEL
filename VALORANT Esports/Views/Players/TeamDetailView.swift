@@ -196,13 +196,13 @@ struct TeamDetailView: View {
                 ForEach(Array(placements.prefix(10)), id: \.id) { placement in
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(placement.event).font(.system(size: 14, weight: .bold)).foregroundStyle(.white).lineLimit(1)
-                            Text(placement.date).font(.system(size: 12)).foregroundStyle(.white.opacity(0.4))
+                            Text(placement.displayEvent).font(.system(size: 14, weight: .bold)).foregroundStyle(.white).lineLimit(1)
+                            Text(placement.date ?? "").font(.system(size: 12)).foregroundStyle(.white.opacity(0.4))
                         }
                         Spacer()
                         VStack(alignment: .trailing, spacing: 4) {
-                            Text(placement.placement).font(.system(size: 14, weight: .black)).foregroundStyle(.yellow)
-                            Text(placement.prize).font(.system(size: 12, weight: .medium)).foregroundStyle(.green.opacity(0.8))
+                            Text(placement.placement ?? "").font(.system(size: 14, weight: .black)).foregroundStyle(.yellow)
+                            Text(placement.prize ?? "").font(.system(size: 12, weight: .medium)).foregroundStyle(.green.opacity(0.8))
                         }
                     }
                     .padding()

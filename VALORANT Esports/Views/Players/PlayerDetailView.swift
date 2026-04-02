@@ -45,15 +45,17 @@ struct PlayerDetailView: View {
                         
                         statsSection(profile)
                         
-                        if !profile.agent_stats.isEmpty {
+                        if let stats = profile.agent_stats, !stats.isEmpty {
                             agentsSection(profile)
                         }
                         
-                        if !profile.current_team.name.isEmpty || !profile.past_teams.isEmpty {
+                        if let current = profile.current_team, !current.name.isEmpty {
+                            teamHistorySection(profile)
+                        } else if let past = profile.past_teams, !past.isEmpty {
                             teamHistorySection(profile)
                         }
                         
-                        if !profile.event_placements.isEmpty {
+                        if let placements = profile.event_placements, !placements.isEmpty {
                             placementsSection(profile)
                         }
                     }
@@ -69,7 +71,7 @@ struct PlayerDetailView: View {
     
     private func headerSection(_ profile: VLRPlayerProfile) -> some View {
         VStack(spacing: 16) {
-            AsyncImage(url: URL(string: profile.avatar)) { phase in
+            AsyncImage(url: URL(string: profile.avatar ?? "")) { phase in
                 switch phase {
                 case .success(let image):
                     image.resizable().aspectRatio(contentMode: .fill)
@@ -90,14 +92,14 @@ struct PlayerDetailView: View {
                     .font(.system(size: 36, weight: .black))
                     .foregroundStyle(.white)
                 
-                if !profile.real_name.isEmpty {
-                    Text(profile.real_name)
+                if let realName = profile.real_name, !realName.isEmpty {
+                    Text(realName)
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(.white.opacity(0.6))
                 }
                 
-                if !profile.country.isEmpty {
-                    Text(profile.country.uppercased())
+                if let country = profile.country, !country.isEmpty {
+                    Text(country.uppercased())
                         .font(.system(size: 12, weight: .black))
                         .tracking(2)
                         .foregroundStyle(.white.opacity(0.4))
@@ -105,7 +107,7 @@ struct PlayerDetailView: View {
                 }
             }
             
-            let result = VLRSearchResult(type: .player, vlrID: playerID, title: profile.name, subtitle: profile.real_name, imageURL: URL(string: profile.avatar), isFavorited: favoritesManager.isFavorite(id: playerID))
+            let result = VLRSearchResult(type: .player, vlrID: playerID, title: profile.name, subtitle: profile.real_name ?? "", imageURL: URL(string: profile.avatar ?? ""), isFavorited: favoritesManager.isFavorite(id: playerID))
             
             Button {
                 favoritesManager.toggleFavoritePlayer(result: result)
@@ -133,7 +135,7 @@ struct PlayerDetailView: View {
                 .foregroundStyle(.white.opacity(0.5))
                 .padding(.horizontal)
             
-            let topStats = profile.agent_stats.first // Usually overall or most played
+            let topStats = profile.agent_stats?.first // Usually overall or most played
             
             HStack(spacing: 12) {
                 StatBox(title: "RATING", value: topStats?.rating ?? "-.--")
@@ -143,7 +145,7 @@ struct PlayerDetailView: View {
             .padding(.horizontal)
             
             HStack(spacing: 12) {
-                StatBox(title: "WINNINGS", value: profile.total_winnings)
+                StatBox(title: "WINNINGS", value: profile.total_winnings ?? "$0")
                 StatBox(title: "KAST", value: topStats?.kast ?? "--%")
                 StatBox(title: "ADR", value: topStats?.adr ?? "---")
             }
@@ -161,7 +163,7 @@ struct PlayerDetailView: View {
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 16) {
-                    ForEach(profile.agent_stats.prefix(5)) { stat in
+                    ForEach((profile.agent_stats ?? []).prefix(5)) { stat in
                         VStack(spacing: 12) {
                             Text(stat.agent.uppercased())
                                 .font(.system(size: 10, weight: .black))
@@ -196,12 +198,14 @@ struct PlayerDetailView: View {
                 .padding(.horizontal)
             
             VStack(spacing: 12) {
-                if !profile.current_team.name.isEmpty {
-                    TeamHistoryRow(name: profile.current_team.name, logo: profile.current_team.logo, dates: "Current", status: profile.current_team.tag, isCurrent: true)
+                if let currentTeam = profile.current_team, !currentTeam.name.isEmpty {
+                    TeamHistoryRow(name: currentTeam.name, logo: currentTeam.logo ?? "", dates: "Current", status: currentTeam.tag ?? "", isCurrent: true)
                 }
                 
-                ForEach(profile.past_teams, id: \.name) { team in
-                    TeamHistoryRow(name: team.name, logo: team.logo, dates: team.dates, status: team.tag, isCurrent: false)
+                if let pastTeams = profile.past_teams {
+                    ForEach(pastTeams, id: \.name) { team in
+                        TeamHistoryRow(name: team.name, logo: team.logo ?? "", dates: team.dates ?? "", status: team.tag ?? "", isCurrent: false)
+                    }
                 }
             }
             .padding(.horizontal)
@@ -217,30 +221,32 @@ struct PlayerDetailView: View {
                 .padding(.horizontal)
             
             VStack(spacing: 12) {
-                ForEach(profile.event_placements, id: \.id) { placement in
-                    HStack(spacing: 16) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(placement.event)
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                            Text(placement.team)
-                                .font(.system(size: 12))
-                                .foregroundStyle(.white.opacity(0.5))
+                if let placements = profile.event_placements {
+                    ForEach(placements, id: \.id) { placement in
+                        HStack(spacing: 16) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(placement.event ?? "Unknown Event")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .lineLimit(1)
+                                Text(placement.team ?? "TBD")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.white.opacity(0.5))
+                            }
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 4) {
+                                Text(placement.placement ?? "-")
+                                    .font(.system(size: 14, weight: .black))
+                                    .foregroundStyle(placementColor(placement.placement ?? "-"))
+                                Text(placement.prize ?? "")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(.green.opacity(0.8))
+                            }
                         }
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 4) {
-                            Text(placement.placement)
-                                .font(.system(size: 14, weight: .black))
-                                .foregroundStyle(placementColor(placement.placement))
-                            Text(placement.prize)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(.green.opacity(0.8))
-                        }
+                        .padding()
+                        .background(Color(white: 0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
-                    .padding()
-                    .background(Color(white: 0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
             }
             .padding(.horizontal)

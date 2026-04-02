@@ -71,7 +71,9 @@ struct EventsView: View {
                                         .clipShape(Capsule())
                                     }
                                 }
-                                .padding(.bottom, 12)
+                                
+                                GlassSearchBar(text: $searchText, placeholder: "Search Events")
+                                    .padding(.bottom, 12)
                         
                                 if service.isLoadingEvents && service.ongoingEvents.isEmpty && service.upcomingEvents.isEmpty {
                                     VStack(spacing: 16) {
@@ -147,7 +149,7 @@ struct EventsView: View {
                                 Color.clear.frame(height: 100)
                             }
                             .padding(.horizontal)
-                            .padding(.top, 20)
+                            .padding(.top, 14)
                         }
                     }
                     .scrollDisabled(isScrollDisabled)
@@ -196,9 +198,7 @@ struct EventsView: View {
                     )
                 }
             }
-            .navigationTitle("")
-            .toolbar(.hidden, for: .navigationBar)
-            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search Events")
+            .toolbar(.hidden)
             .task { await service.fetchEvents() }
         }
     }

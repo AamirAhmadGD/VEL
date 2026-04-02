@@ -18,41 +18,44 @@ struct VLRPlayerData: Codable {
     let segments: [VLRPlayerProfile]
 }
 
-struct VLRPlayerProfile: Codable {
+struct VLRPlayerProfile: Codable, Sendable {
     let id: String
     let name: String
-    let real_name: String
-    let avatar: String
-    let country: String
-    let social_links: [VLRSocialLink]
-    let current_team: VLRPlayerTeam
-    let past_teams: [VLRPlayerPastTeam]
-    let agent_stats: [VLRPlayerAgentStat]
-    let event_placements: [VLRPlayerEventPlacement]
-    let news: [VLRPlayerNews]
-    let total_winnings: String
+    let real_name: String?
+    let avatar: String?
+    let country: String?
+    let social_links: [VLRSocialLink]?
+    let current_team: VLRPlayerTeam?
+    let past_teams: [VLRPlayerPastTeam]?
+    let agent_stats: [VLRPlayerAgentStat]?
+    let event_placements: [VLRPlayerEventPlacement]?
+    let news: [VLRPlayerNews]?
+    let total_winnings: String?
+    
+    // Scraper-specific helpers
+    var region: String? { country } // Region is often displayed in place of country
 }
 
-struct VLRSocialLink: Codable {
+struct VLRSocialLink: Codable, Sendable {
     let platform: String
     let url: String
 }
 
-struct VLRPlayerTeam: Codable {
+struct VLRPlayerTeam: Codable, Sendable {
     let name: String
-    let tag: String
-    let logo: String
-    let joined: String
+    let tag: String?
+    let logo: String?
+    let joined: String?
 }
 
-struct VLRPlayerPastTeam: Codable {
+struct VLRPlayerPastTeam: Codable, Sendable {
     let name: String
-    let tag: String
-    let dates: String
-    let logo: String
+    let tag: String?
+    let dates: String?
+    let logo: String?
 }
 
-struct VLRPlayerAgentStat: Codable, Identifiable {
+struct VLRPlayerAgentStat: Codable, Identifiable, Sendable {
     var id: String { agent }
     let agent: String
     let usage_count: String
@@ -74,18 +77,18 @@ struct VLRPlayerAgentStat: Codable, Identifiable {
     let fd: String
 }
 
-struct VLRPlayerEventPlacement: Codable, Identifiable {
-    var id: String { event + date }
-    let event: String
-    let series: String
-    let placement: String
-    let prize: String
-    let team: String
-    let date: String
-    let url: String
+struct VLRPlayerEventPlacement: Codable, Identifiable, Sendable {
+    var id: String { (event ?? "") + (date ?? "") }
+    let event: String?
+    let series: String?
+    let placement: String?
+    let prize: String?
+    let team: String?
+    let date: String?
+    let url: String?
 }
 
-struct VLRPlayerNews: Codable, Identifiable {
+struct VLRPlayerNews: Codable, Identifiable, Sendable {
     var id: String { url }
     let title: String
     let url: String

@@ -6,7 +6,20 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		5C919DD72F7DC17400DCF5CF /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5C919DD62F7DC17300DCF5CF /* WidgetKit.framework */; };
+		5C919DD92F7DC17400DCF5CF /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5C919DD82F7DC17400DCF5CF /* SwiftUI.framework */; };
+		5C919DEA2F7DC17500DCF5CF /* VALORANT EsportsWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5C919DD42F7DC17300DCF5CF /* VALORANT EsportsWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
+		5C919DE82F7DC17500DCF5CF /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5CA09E4D2F3186AC00C4933A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5C919DD32F7DC17300DCF5CF;
+			remoteInfo = "VALORANT EsportsWidgetsExtension";
+		};
 		5CA09E632F3186AD00C4933A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 5CA09E4D2F3186AC00C4933A /* Project object */;
@@ -23,13 +36,48 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		5C919DEF2F7DC17500DCF5CF /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				5C919DEA2F7DC17500DCF5CF /* VALORANT EsportsWidgetsExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		5C919DD42F7DC17300DCF5CF /* VALORANT EsportsWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "VALORANT EsportsWidgetsExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		5C919DD62F7DC17300DCF5CF /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		5C919DD82F7DC17400DCF5CF /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		5CA09E552F3186AC00C4933A /* VALORANT Esports.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "VALORANT Esports.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		5CA09E622F3186AD00C4933A /* VALORANT EsportsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "VALORANT EsportsTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		5CA09E6C2F3186AD00C4933A /* VALORANT EsportsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "VALORANT EsportsUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		5C919DEB2F7DC17500DCF5CF /* Exceptions for "VALORANT EsportsWidgets" folder in "VALORANT EsportsWidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 5C919DD32F7DC17300DCF5CF /* VALORANT EsportsWidgetsExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		5C919DDA2F7DC17400DCF5CF /* VALORANT EsportsWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				5C919DEB2F7DC17500DCF5CF /* Exceptions for "VALORANT EsportsWidgets" folder in "VALORANT EsportsWidgetsExtension" target */,
+			);
+			path = "VALORANT EsportsWidgets";
+			sourceTree = "<group>";
+		};
 		5CA09E572F3186AC00C4933A /* VALORANT Esports */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "VALORANT Esports";
@@ -48,6 +96,15 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		5C919DD12F7DC17300DCF5CF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5C919DD92F7DC17400DCF5CF /* SwiftUI.framework in Frameworks */,
+				5C919DD72F7DC17400DCF5CF /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		5CA09E522F3186AC00C4933A /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -72,12 +129,23 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		5C919DD52F7DC17300DCF5CF /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				5C919DD62F7DC17300DCF5CF /* WidgetKit.framework */,
+				5C919DD82F7DC17400DCF5CF /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		5CA09E4C2F3186AC00C4933A = {
 			isa = PBXGroup;
 			children = (
 				5CA09E572F3186AC00C4933A /* VALORANT Esports */,
 				5CA09E652F3186AD00C4933A /* VALORANT EsportsTests */,
 				5CA09E6F2F3186AD00C4933A /* VALORANT EsportsUITests */,
+				5C919DDA2F7DC17400DCF5CF /* VALORANT EsportsWidgets */,
+				5C919DD52F7DC17300DCF5CF /* Frameworks */,
 				5CA09E562F3186AC00C4933A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -88,6 +156,7 @@
 				5CA09E552F3186AC00C4933A /* VALORANT Esports.app */,
 				5CA09E622F3186AD00C4933A /* VALORANT EsportsTests.xctest */,
 				5CA09E6C2F3186AD00C4933A /* VALORANT EsportsUITests.xctest */,
+				5C919DD42F7DC17300DCF5CF /* VALORANT EsportsWidgetsExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -95,6 +164,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		5C919DD32F7DC17300DCF5CF /* VALORANT EsportsWidgetsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5C919DEC2F7DC17500DCF5CF /* Build configuration list for PBXNativeTarget "VALORANT EsportsWidgetsExtension" */;
+			buildPhases = (
+				5C919DD02F7DC17300DCF5CF /* Sources */,
+				5C919DD12F7DC17300DCF5CF /* Frameworks */,
+				5C919DD22F7DC17300DCF5CF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				5C919DDA2F7DC17400DCF5CF /* VALORANT EsportsWidgets */,
+			);
+			name = "VALORANT EsportsWidgetsExtension";
+			packageProductDependencies = (
+			);
+			productName = "VALORANT EsportsWidgetsExtension";
+			productReference = 5C919DD42F7DC17300DCF5CF /* VALORANT EsportsWidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		5CA09E542F3186AC00C4933A /* VALORANT Esports */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 5CA09E762F3186AD00C4933A /* Build configuration list for PBXNativeTarget "VALORANT Esports" */;
@@ -102,10 +193,12 @@
 				5CA09E512F3186AC00C4933A /* Sources */,
 				5CA09E522F3186AC00C4933A /* Frameworks */,
 				5CA09E532F3186AC00C4933A /* Resources */,
+				5C919DEF2F7DC17500DCF5CF /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				5C919DE92F7DC17500DCF5CF /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				5CA09E572F3186AC00C4933A /* VALORANT Esports */,
@@ -173,6 +266,9 @@
 				LastSwiftUpdateCheck = 2620;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
+					5C919DD32F7DC17300DCF5CF = {
+						CreatedOnToolsVersion = 26.2;
+					};
 					5CA09E542F3186AC00C4933A = {
 						CreatedOnToolsVersion = 26.2;
 					};
@@ -203,11 +299,19 @@
 				5CA09E542F3186AC00C4933A /* VALORANT Esports */,
 				5CA09E612F3186AD00C4933A /* VALORANT EsportsTests */,
 				5CA09E6B2F3186AD00C4933A /* VALORANT EsportsUITests */,
+				5C919DD32F7DC17300DCF5CF /* VALORANT EsportsWidgetsExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		5C919DD22F7DC17300DCF5CF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		5CA09E532F3186AC00C4933A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -232,6 +336,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		5C919DD02F7DC17300DCF5CF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		5CA09E512F3186AC00C4933A /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -256,6 +367,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		5C919DE92F7DC17500DCF5CF /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5C919DD32F7DC17300DCF5CF /* VALORANT EsportsWidgetsExtension */;
+			targetProxy = 5C919DE82F7DC17500DCF5CF /* PBXContainerItemProxy */;
+		};
 		5CA09E642F3186AD00C4933A /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 5CA09E542F3186AC00C4933A /* VALORANT Esports */;
@@ -269,6 +385,66 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		5C919DED2F7DC17500DCF5CF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6Z77Y52QVL;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "VALORANT EsportsWidgets/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "VALORANT EsportsWidgets";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.aamir.VALORANT-Esports.VALORANT-EsportsWidgets";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		5C919DEE2F7DC17500DCF5CF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6Z77Y52QVL;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "VALORANT EsportsWidgets/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "VALORANT EsportsWidgets";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.aamir.VALORANT-Esports.VALORANT-EsportsWidgets";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		5CA09E742F3186AD00C4933A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -395,8 +571,10 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6Z77Y52QVL;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -431,8 +609,10 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6Z77Y52QVL;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -466,6 +646,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6Z77Y52QVL;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
@@ -487,6 +668,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6Z77Y52QVL;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
@@ -507,6 +689,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6Z77Y52QVL;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.aamir.VALORANT-EsportsUITests";
@@ -526,6 +709,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6Z77Y52QVL;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.aamir.VALORANT-EsportsUITests";
@@ -543,6 +727,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		5C919DEC2F7DC17500DCF5CF /* Build configuration list for PBXNativeTarget "VALORANT EsportsWidgetsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5C919DED2F7DC17500DCF5CF /* Debug */,
+				5C919DEE2F7DC17500DCF5CF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		5CA09E502F3186AC00C4933A /* Build configuration list for PBXProject "VALORANT Esports" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
