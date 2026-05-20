@@ -54,7 +54,9 @@ final class VLRService: ObservableObject {
     
     private init() {
         Task {
+            await AppEnvironment.resolveAPIBaseURL()
             self.isAPIAvailable = await AppEnvironment.isAPIAvailable()
+            print("🔗 API Base: \(AppEnvironment.apiBaseURL), available: \(self.isAPIAvailable)")
         }
     }
     
@@ -66,15 +68,25 @@ final class VLRService: ObservableObject {
         }
         
         var request = URLRequest(url: url)
-        request.timeoutInterval = 10.0
+        request.timeoutInterval = 15.0
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            print("❌ API returned status \(statusCode) for \(endpoint)")
             throw URLError(.badServerResponse)
         }
         
-        return try JSONDecoder().decode(T.self, from: data)
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            // Log the exact decode error and raw response for debugging
+            let rawJSON = String(data: data, encoding: .utf8) ?? "<binary>"
+            print("❌ JSON decode error for \(endpoint): \(error)")
+            print("📄 Raw response (first 500 chars): \(String(rawJSON.prefix(500)))")
+            throw error
+        }
     }
     
     // MARK: - Current Events (v2)
@@ -225,30 +237,84 @@ final class VLRService: ObservableObject {
     
     // Silent background poll to keep scores updated
     func fetchLiveMatchesOnly() async {
-        self.liveMatches = await VLRScraperService.shared.scrapeLiveMatches()
+        if isAPIAvailable {
+            do {
+                let liveRes: VLRMatchResponse = try await fetchFromAPI(endpoint: "/v2/match?q=live_score")
+                if !liveRes.data.segments.isEmpty {
+                    self.liveMatches = liveRes.data.segments
+                }
+                return
+            } catch {
+                print("API fetchLiveMatchesOnly failed: \(error)")
+            }
+        }
+        
+        let live = await VLRScraperService.shared.scrapeLiveMatches()
+        if !live.isEmpty {
+            self.liveMatches = live
+        }
     }
 
     // Silent background poll to keep upcoming and recent past matches updated (time left/ago)
     func refreshUpcomingAndPastMatches() async {
+        if isAPIAvailable {
+            do {
+                async let upcomingRes: VLRMatchResponse = fetchFromAPI(endpoint: "/v2/match?q=upcoming")
+                async let pastRes: VLRMatchResponse = fetchFromAPI(endpoint: "/v2/match?q=results&page=1")
+                
+                let upcoming = try await upcomingRes
+                let past = try await pastRes
+                
+                if !upcoming.data.segments.isEmpty {
+                    self.upcomingMatches = upcoming.data.segments
+                }
+                
+                let newPast = past.data.segments
+                if !newPast.isEmpty {
+                    if self.pastMatches.isEmpty {
+                        self.pastMatches = newPast
+                    } else {
+                        var updated = self.pastMatches
+                        for newMatch in newPast.reversed() {
+                            if let idx = updated.firstIndex(where: { $0.match_page == newMatch.match_page }) {
+                                updated[idx] = newMatch
+                            } else {
+                                updated.insert(newMatch, at: 0)
+                            }
+                        }
+                        self.pastMatches = updated
+                    }
+                }
+                return
+            } catch {
+                print("API refreshUpcomingAndPastMatches failed: \(error)")
+            }
+        }
+        
         async let upcoming = VLRScraperService.shared.scrapeUpcomingMatches()
         async let past = VLRScraperService.shared.scrapeMatchResults(page: 1)
         
-        self.upcomingMatches = await upcoming
-        let newPast = await past
+        let newUpcoming = await upcoming
+        if !newUpcoming.isEmpty {
+            self.upcomingMatches = newUpcoming
+        }
         
-        if self.pastMatches.isEmpty {
-            self.pastMatches = newPast
-        } else {
-            // Update existing or prepending new results
-            var updated = self.pastMatches
-            for newMatch in newPast.reversed() {
-                if let idx = updated.firstIndex(where: { $0.match_page == newMatch.match_page }) {
-                    updated[idx] = newMatch
-                } else {
-                    updated.insert(newMatch, at: 0)
+        let newPast = await past
+        if !newPast.isEmpty {
+            if self.pastMatches.isEmpty {
+                self.pastMatches = newPast
+            } else {
+                // Update existing or prepending new results
+                var updated = self.pastMatches
+                for newMatch in newPast.reversed() {
+                    if let idx = updated.firstIndex(where: { $0.match_page == newMatch.match_page }) {
+                        updated[idx] = newMatch
+                    } else {
+                        updated.insert(newMatch, at: 0)
+                    }
                 }
+                self.pastMatches = updated
             }
-            self.pastMatches = updated
         }
     }
 

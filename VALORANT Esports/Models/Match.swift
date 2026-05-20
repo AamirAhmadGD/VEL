@@ -12,10 +12,12 @@ import Combine
 // MARK: - Match List Response Models (v2/match)
 
 struct VLRMatchResponse: Codable, Sendable {
+    let status: String?
     let data: VLRMatchData
 }
 
 struct VLRMatchData: Codable, Sendable {
+    let status: Int?
     let segments: [VLRMatch]
 }
 
@@ -83,12 +85,16 @@ struct VLRMatch: Codable, Identifiable, Sendable {
         let components = match_page.components(separatedBy: "/")
         return components.first(where: { Int($0) != nil }) ?? ""
     }
+
+    static var placeholder: VLRMatch {
+        VLRMatch(team1: "Team 1", team2: "Team 2", flag1: "us", flag2: "ca", match_page: "/123/placeholder", score1: "0", score2: "0", time_until_match: "TBD", match_event: "Placeholder Event", match_series: "Placeholder Series", time_completed: "TBD", tournament_name: "Placeholder Tournament", round_info: "Placeholder Round", tournament_icon: nil)
+    }
 }
 
 // MARK: - Event Match List Response Models (/events/matches)
 
 struct VLREventMatchResponse: Codable, Sendable {
-    // Note: No top-level "status" string in this endpoint
+    let status: String?
     let data: VLREventMatchData
 }
 

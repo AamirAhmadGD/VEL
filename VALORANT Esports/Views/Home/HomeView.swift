@@ -13,7 +13,7 @@ struct HomeView: View {
     @State private var isScrollDisabled = false
 
     // Live scores: every 60s to prevent IP bans
-    let liveTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
+    let liveTimer = Timer.publish(every: 45, on: .main, in: .common).autoconnect()
     // Upcoming refresh: every 5 minutes
     let upcomingTimer = Timer.publish(every: 300, on: .main, in: .common).autoconnect()
 
@@ -45,7 +45,7 @@ struct HomeView: View {
                             .frame(height: 1)
                             .background(Color.clear)
 
-                            VStack(alignment: .leading, spacing: 14) {
+                            LazyVStack(alignment: .leading, spacing: 14) {
                                 // "Home" & "Past Matches" Row
                                 HStack {
                                     Text("Home")
@@ -79,13 +79,12 @@ struct HomeView: View {
 
                                 if service.isLoadingMatches && service.liveMatches.isEmpty && service.upcomingMatches.isEmpty {
                                     VStack(spacing: 16) {
-                                        ProgressView().tint(.white)
-                                        Text("Loading matches…")
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundStyle(.white.opacity(0.5))
+                                        ForEach(0..<3, id: \.self) { _ in
+                                            StandardMatchCard(match: VLRMatch.placeholder, accentColor: vlrRed.opacity(0.3))
+                                                .redacted(reason: .placeholder)
+                                        }
                                     }
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.top, 80)
+                                    .padding(.top, 20)
                                 } else if let error = service.matchesError, service.liveMatches.isEmpty && service.upcomingMatches.isEmpty {
                                     VStack(spacing: 12) {
                                         Image(systemName: "wifi.slash").font(.system(size: 40)).foregroundStyle(.white.opacity(0.3))
@@ -131,6 +130,9 @@ struct HomeView: View {
                             .padding(.horizontal)
                             Color.clear.frame(height: 100)
                         }
+                    }
+                    .refreshable {
+                        await service.fetchMatches()
                     }
                     .scrollDisabled(isScrollDisabled)
                     .coordinateSpace(name: "scroll")

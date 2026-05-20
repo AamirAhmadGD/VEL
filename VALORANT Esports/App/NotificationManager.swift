@@ -68,7 +68,9 @@ class NotificationManager: ObservableObject {
             if triggerDate > Date() {
                 let content = UNMutableNotificationContent()
                 content.title = "Match Update: \(match.team1) vs \(match.team2)"
-                content.body = "The match \(message)"
+                let roundText = match.round_info ?? match.match_series ?? ""
+                let eventText = match.displayTournament
+                content.body = "The \(eventText) \(roundText) match \(message)"
                 content.sound = .default
                 
                 let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: triggerDate)

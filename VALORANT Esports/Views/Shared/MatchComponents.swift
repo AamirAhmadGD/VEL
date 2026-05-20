@@ -173,11 +173,32 @@ struct TeamLogoImage: View {
             hasFetched = false
             
             logoURLString = await TeamLogoCache.shared.getLogo(for: teamName, matchID: matchID)
+            
+            if logoURLString == nil {
+                // Poll briefly for the background fetch to complete
+                for _ in 0..<10 {
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                    if let url = await TeamLogoCache.shared.getLogo(for: teamName, matchID: matchID) {
+                        logoURLString = url
+                        break
+                    }
+                }
+            }
+            
             hasFetched = true
         }
     }
 
     var fallbackIcon: some View {
-        Circle().fill(Color.white.opacity(0.05)).frame(width: 54, height: 54).overlay(Circle().stroke(Color.white.opacity(0.15), lineWidth: 1.5))
+        ZStack {
+            Circle().fill(Color.white.opacity(0.05))
+            Image(systemName: "v.circle.fill")
+                .resizable()
+                .scaledToFit()
+                .padding(12)
+                .foregroundStyle(Color(red: 1.0, green: 0.2, blue: 0.2).opacity(0.5))
+        }
+        .frame(width: 54, height: 54)
+        .overlay(Circle().stroke(Color.white.opacity(0.15), lineWidth: 1.5))
     }
 }

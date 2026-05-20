@@ -223,10 +223,47 @@ struct MatchDetailView: View {
 
     var loadingView: some View {
         VStack(spacing: 16) {
-            ProgressView().tint(.white).scaleEffect(1.2)
-            Text("Loading match…")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.white.opacity(0.5))
+            // Header skeleton
+            VStack(spacing: 16) {
+                Text("PLACEHOLDER EVENT").font(.system(size: 11, weight: .bold)).redacted(reason: .placeholder)
+                HStack {
+                    Circle().frame(width: 60, height: 60).redacted(reason: .placeholder)
+                    Spacer()
+                    Text("0 - 0").font(.system(size: 48, weight: .black)).redacted(reason: .placeholder)
+                    Spacer()
+                    Circle().frame(width: 60, height: 60).redacted(reason: .placeholder)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            
+            Divider().background(Color.white.opacity(0.08))
+            
+            // Map selector skeleton
+            HStack {
+                ForEach(0..<3, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 12).frame(width: 80, height: 46).redacted(reason: .placeholder)
+                }
+            }.padding(.horizontal, 20)
+            
+            Divider().background(Color.white.opacity(0.08))
+            
+            // Scoreboard skeleton
+            VStack(alignment: .leading, spacing: 12) {
+                Text("SCOREBOARD").font(.system(size: 13, weight: .black)).redacted(reason: .placeholder)
+                ForEach(0..<5, id: \.self) { _ in
+                    HStack {
+                        RoundedRectangle(cornerRadius: 1.5).frame(width: 3, height: 28).redacted(reason: .placeholder)
+                        VStack(alignment: .leading) {
+                            Text("PlayerName").font(.system(size: 13, weight: .bold)).redacted(reason: .placeholder)
+                            Text("AGENT").font(.system(size: 9, weight: .bold)).redacted(reason: .placeholder)
+                        }
+                        Spacer()
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
         }
     }
 
@@ -949,8 +986,8 @@ final class MatchDetailViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
 
-    // Timer fires every 15s; listener in View gate-checks if match is live
-    let refreshTimer = Timer.publish(every: 15, on: .main, in: .common).autoconnect()
+    // Timer fires every 45s; listener in View gate-checks if match is live
+    let refreshTimer = Timer.publish(every: 45, on: .main, in: .common).autoconnect()
 
     init(matchID: String) {
         self.matchID = matchID

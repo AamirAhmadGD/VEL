@@ -70,6 +70,11 @@ actor TeamLogoCache {
         "wolves": "https://owcdn.net/img/66b2b528be63a.png"
     ]
     
+    /// Tracks teams currently being fetched to avoid duplicate requests
+    private var inFlightFetches: Set<String> = []
+    /// Teams we already tried and failed to find a logo for
+    private var failedLookups: Set<String> = []
+    
     private init() {
         if let data = UserDefaults.standard.data(forKey: userDefaultsKey),
            let savedCache = try? JSONDecoder().decode([String: String].self, from: data) {
@@ -79,18 +84,89 @@ actor TeamLogoCache {
         }
     }
     
-    /// Returns the cached logo URL string for a popular team, or nil to fallback to Country Flag.
+    /// Returns the cached logo URL string for a team.
+    /// If not cached, triggers a background fetch from VLR search.
     func getLogo(for teamName: String, matchID: String) -> String? {
         let key = normalizeTeamName(teamName)
-        return cache[key]
+        
+        // Return cached logo immediately if we have one
+        if let cached = cache[key] {
+            return cached
+        }
+        
+        // If we already failed for this team, don't retry
+        if failedLookups.contains(key) {
+            return nil
+        }
+        
+        // If not already fetching, kick off a background fetch
+        if !inFlightFetches.contains(key) {
+            inFlightFetches.insert(key)
+            Task {
+                await fetchLogoFromVLR(teamName: teamName, key: key)
+            }
+        }
+        
+        return nil
     }
     
     /// Allows other parts of the app to dynamically add to the dictionary.
     func saveLogo(for teamName: String, url: String) {
         let key = normalizeTeamName(teamName)
-        if !key.isEmpty && key != "tbd" && key != "tbc" {
+        if !key.isEmpty && key != "tbd" && key != "tbc" && !url.isEmpty {
             cache[key] = url
             persistToDisk()
+        }
+    }
+    
+    /// Fetches a team's logo by searching VLR.gg and parsing the first team result's thumbnail.
+    private func fetchLogoFromVLR(teamName: String, key: String) async {
+        defer { inFlightFetches.remove(key) }
+        
+        let encoded = teamName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? teamName
+        guard let url = URL(string: "https://www.vlr.gg/search/?q=\(encoded)") else {
+            failedLookups.insert(key)
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 5.0
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200,
+                  let html = String(data: data, encoding: .utf8) else {
+                failedLookups.insert(key)
+                return
+            }
+            
+            // Look for the first team result's image
+            // Pattern: <a href="/search/r/team/... <img src="//owcdn.net/img/xxxxx.png">
+            let pattern = "<a href=\"/search/r/team/\\d+/[^\"]*\"[^>]*>.*?<img src=\"([^\"]*)\""
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else {
+                failedLookups.insert(key)
+                return
+            }
+            
+            let nsString = html as NSString
+            if let match = regex.firstMatch(in: html, range: NSRange(location: 0, length: nsString.length)),
+               match.numberOfRanges >= 2 {
+                var imgSrc = nsString.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+                if imgSrc.hasPrefix("//") {
+                    imgSrc = "https:" + imgSrc
+                }
+                if !imgSrc.isEmpty {
+                    cache[key] = imgSrc
+                    persistToDisk()
+                    return
+                }
+            }
+            
+            failedLookups.insert(key)
+        } catch {
+            failedLookups.insert(key)
         }
     }
     

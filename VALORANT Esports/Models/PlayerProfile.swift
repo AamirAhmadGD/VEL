@@ -10,6 +10,7 @@ import SwiftUI
 import Combine
 
 struct VLRPlayerResponse: Codable {
+    let status: String?
     let data: VLRPlayerData
 }
 

@@ -12,12 +12,16 @@ class PlayerDetailViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
     
-    func loadProfile(playerID: String) async {
+    @Published var selectedTimespan: String = "all"
+    
+    func loadProfile(playerID: String, timespan: String? = nil) async {
         isLoading = true
         error = nil
         
+        let ts = timespan ?? selectedTimespan
+        
         do {
-            self.profile = try await VLRService.shared.fetchPlayerProfile(id: playerID)
+            self.profile = try await VLRService.shared.fetchPlayerProfile(id: playerID, timespan: ts)
         } catch {
             self.error = error.localizedDescription
         }

@@ -8,6 +8,7 @@
 import Foundation
 
 struct VLRTeamResponse: Codable {
+    let status: String?
     let data: VLRTeamData
 }
 
