@@ -6,9 +6,18 @@
 //
 
 import SwiftUI
+import UIKit
+import Combine
+
+@MainActor
+class DeepLinkRouter: ObservableObject {
+    @Published var matchIDToOpen: String?
+}
 
 @main
 struct VALORANT_EsportsApp: App {
+    @StateObject private var deepLinkRouter = DeepLinkRouter()
+
     @MainActor
     init() {
         // Force all UIKit backgrounds to black so no white bleeds through during transitions
@@ -50,9 +59,24 @@ struct VALORANT_EsportsApp: App {
                 Color.black.ignoresSafeArea()
                 MainTabView()
                     .environmentObject(favoritesManager)
+                    .environmentObject(deepLinkRouter)
                     .preferredColorScheme(.dark)
                     .tint(Color(red: 0.9, green: 0.2, blue: 0.2)) // Global accent color fallback
+                    .onOpenURL { url in
+                        if let matchID = parseMatchID(from: url) {
+                            deepLinkRouter.matchIDToOpen = matchID
+                        }
+                    }
             }
         }
+    }
+
+    private func parseMatchID(from url: URL) -> String? {
+        guard url.scheme == "valorantesports" else { return nil }
+        let pathComponents = url.pathComponents.filter { $0 != "/" }
+        if pathComponents.first == "match", pathComponents.count >= 2 {
+            return pathComponents[1]
+        }
+        return nil
     }
 }

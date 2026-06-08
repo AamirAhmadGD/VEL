@@ -8,9 +8,12 @@ struct HomeView: View {
 
     @StateObject private var service = VLRService.shared
     @EnvironmentObject private var favoritesManager: FavoritesManager
+    @EnvironmentObject private var deepLinkRouter: DeepLinkRouter
 
     @State private var hasScrolledDown: Bool = false
     @State private var isScrollDisabled = false
+    @State private var deepLinkMatch: VLRMatch? = nil
+    @State private var deepLinkActive = false
 
     // Live scores: every 60s to prevent IP bans
     let liveTimer = Timer.publish(every: 45, on: .main, in: .common).autoconnect()
@@ -28,6 +31,16 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
+            NavigationLink(destination: Group {
+                if let deepLinkMatch = deepLinkMatch {
+                    MatchDetailView(vlrMatch: deepLinkMatch)
+                } else {
+                    EmptyView()
+                }
+            }, isActive: $deepLinkActive) {
+                EmptyView()
+            }
+
             ZStack {
                 Color.black.ignoresSafeArea()
                 ScrollViewReader { proxy in
@@ -132,7 +145,7 @@ struct HomeView: View {
                         }
                     }
                     .refreshable {
-                        await service.fetchMatches()
+                        await service.fetchMatches(force: true)
                     }
                     .scrollDisabled(isScrollDisabled)
                     .coordinateSpace(name: "scroll")
@@ -185,6 +198,16 @@ struct HomeView: View {
                 if service.liveMatches.isEmpty && service.upcomingMatches.isEmpty {
                     await service.fetchMatches()
                 }
+            }
+            .onChange(of: deepLinkRouter.matchIDToOpen) { id in
+                guard let id = id else { return }
+                if let match = service.liveMatches.first(where: { $0.numeric_id == id }) ?? service.upcomingMatches.first(where: { $0.numeric_id == id }) {
+                    deepLinkMatch = match
+                } else {
+                    deepLinkMatch = VLRMatch.placeholder(matchID: id)
+                }
+                deepLinkActive = true
+                deepLinkRouter.matchIDToOpen = nil
             }
             .onReceive(liveTimer) { _ in
                 Task { await service.fetchLiveMatchesOnly() }

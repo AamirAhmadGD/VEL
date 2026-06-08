@@ -67,7 +67,6 @@ struct TeamDetailView: View {
             .background(Circle().fill(.white.opacity(0.05)))
             .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 2))
             .clipShape(Circle())
-            .shadow(color: .white.opacity(0.2), radius: 15)
             
             VStack(spacing: 4) {
                 Text(profile.name)
@@ -194,32 +193,16 @@ struct TeamDetailView: View {
             
             VStack(spacing: 8) {
                 ForEach(Array(placements.prefix(10)), id: \.id) { placement in
-                    HStack(spacing: 12) {
+                    HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(placement.displayEvent)
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(.white)
-                                .lineLimit(2)
-                                .minimumScaleFactor(0.8)
-                            Text(placement.date ?? "")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.white.opacity(0.4))
+                            Text(placement.displayEvent).font(.system(size: 14, weight: .bold)).foregroundStyle(.white).lineLimit(1)
+                            Text(placement.date ?? "").font(.system(size: 12)).foregroundStyle(.white.opacity(0.4))
                         }
-                        
-                        Spacer(minLength: 8)
-                        
+                        Spacer()
                         VStack(alignment: .trailing, spacing: 4) {
-                            Text(placement.placement ?? "")
-                                .font(.system(size: 14, weight: .black))
-                                .foregroundStyle(.yellow)
-                            if let prize = placement.prize, !prize.isEmpty {
-                                Text(prize)
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(.green.opacity(0.8))
-                            }
+                            Text(placement.placement ?? "").font(.system(size: 14, weight: .black)).foregroundStyle(.yellow)
+                            Text(placement.prize ?? "").font(.system(size: 12, weight: .medium)).foregroundStyle(.green.opacity(0.8))
                         }
-                        .fixedSize(horizontal: true, vertical: false)
-                        .layoutPriority(1)
                     }
                     .padding()
                     .background(Color(white: 0.08))

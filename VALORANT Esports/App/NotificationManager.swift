@@ -14,8 +14,12 @@ class NotificationManager: ObservableObject {
     static let shared = NotificationManager()
     
     @Published var isAuthorized = false
+    @Published private(set) var trackedMatchIDs: Set<String> = []
+    
+    private let trackedMatchesKey = "trackedMatchIDs"
     
     private init() {
+        loadTrackedMatchIDs()
         checkStatus()
     }
     
@@ -34,6 +38,32 @@ class NotificationManager: ObservableObject {
             DispatchQueue.main.async {
                 self.isAuthorized = settings.authorizationStatus == .authorized
             }
+        }
+    }
+    
+    private func loadTrackedMatchIDs() {
+        guard let data = UserDefaults.standard.data(forKey: trackedMatchesKey),
+              let ids = try? JSONDecoder().decode(Set<String>.self, from: data) else {
+            trackedMatchIDs = []
+            return
+        }
+        trackedMatchIDs = ids
+    }
+    
+    private func persistTrackedMatchIDs() {
+        if let data = try? JSONEncoder().encode(trackedMatchIDs) {
+            UserDefaults.standard.set(data, forKey: trackedMatchesKey)
+        }
+    }
+    
+    private func syncTrackedMatches(with pending: [UNNotificationRequest]) {
+        let activeIDs = Set(pending.compactMap { request -> String? in
+            request.identifier.components(separatedBy: "-").first
+        })
+        let updated = trackedMatchIDs.intersection(activeIDs)
+        if updated != trackedMatchIDs {
+            trackedMatchIDs = updated
+            persistTrackedMatchIDs()
         }
     }
     
@@ -85,17 +115,43 @@ class NotificationManager: ObservableObject {
                 }
             }
         }
+        trackedMatchIDs.insert(matchID)
+        persistTrackedMatchIDs()
     }
     
     func cancelNotifications(for matchID: String) {
-        let ids = ["\(matchID)-60m", "\(matchID)-30m", "\(matchID)-5m", "\(matchID)-0m"]
+        let ids = ["\(matchID)-60m", "\(matchID)-30m", "\(matchID)-5m", "\(matchID)-0m", "\(matchID)-test"]
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
+        trackedMatchIDs.remove(matchID)
+        persistTrackedMatchIDs()
     }
 
     func isTracking(matchID: String) async -> Bool {
         let center = UNUserNotificationCenter.current()
         let pending = await center.pendingNotificationRequests()
-        return pending.contains { $0.identifier.hasPrefix(matchID) }
+        syncTrackedMatches(with: pending)
+        return trackedMatchIDs.contains(matchID) || pending.contains { $0.identifier.hasPrefix(matchID) }
+    }
+
+    func sendTestNotification(for match: VLRMatch) async {
+        if !isAuthorized {
+            await requestAuthorization()
+        }
+        guard isAuthorized else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Test Notification: \(match.team1) vs \(match.team2)"
+        content.body = "This is a test alert for the match you are tracking."
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
+        let request = UNNotificationRequest(identifier: "\(match.numeric_id)-test", content: content, trigger: trigger)
+
+        do {
+            try await UNUserNotificationCenter.current().add(request)
+        } catch {
+            print("Failed to send test notification: \(error)")
+        }
     }
 }
 

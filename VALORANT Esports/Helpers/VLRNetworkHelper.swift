@@ -16,11 +16,18 @@ struct VLRNetworkHelper {
             throw VLRNetworkError.invalidURL
         }
         
+        let config = URLSessionConfiguration.default
+        config.requestCachePolicy = .returnCacheDataElseLoad
+        config.urlCache = URLCache(memoryCapacity: 10 * 1024 * 1024,
+                                   diskCapacity: 50 * 1024 * 1024,
+                                   diskPath: "vlr-html-cache")
+
         var request = URLRequest(url: url)
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData // Ensure fresh data for live scores
-        
-        let (data, _) = try await URLSession.shared.data(for: request)
+        request.cachePolicy = .returnCacheDataElseLoad
+        request.timeoutInterval = 10.0
+
+        let (data, _) = try await URLSession(configuration: config).data(for: request)
         
         guard let html = String(data: data, encoding: .utf8) else {
             throw VLRNetworkError.decodingError

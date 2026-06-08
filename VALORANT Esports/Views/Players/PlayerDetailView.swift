@@ -43,8 +43,6 @@ struct PlayerDetailView: View {
                     VStack(spacing: 32) {
                         headerSection(profile)
                         
-                        timespanPicker(playerID: playerID)
-                        
                         statsSection(profile)
                         
                         if let stats = profile.agent_stats, !stats.isEmpty {
@@ -87,7 +85,6 @@ struct PlayerDetailView: View {
             .background(Circle().fill(.white.opacity(0.05)))
             .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 2))
             .clipShape(Circle())
-            .shadow(color: .white.opacity(0.2), radius: 15)
             
             VStack(spacing: 4) {
                 Text(profile.name)
@@ -129,48 +126,27 @@ struct PlayerDetailView: View {
         .padding(.top, 20)
     }
     
-    private func timespanPicker(playerID: String) -> some View {
-        Picker("Timespan", selection: $viewModel.selectedTimespan) {
-            Text("30 Days").tag("30d")
-            Text("60 Days").tag("60d")
-            Text("90 Days").tag("90d")
-            Text("All Time").tag("all")
-        }
-        .pickerStyle(.segmented)
-        .padding(.horizontal)
-        .onChange(of: viewModel.selectedTimespan) { _, newValue in
-            Task { await viewModel.loadProfile(playerID: playerID, timespan: newValue) }
-        }
-    }
-    
     private func statsSection(_ profile: VLRPlayerProfile) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("AVERAGE STATS")
+            Text("OVERALL STATS")
                 .font(.system(size: 14, weight: .black))
                 .tracking(2)
                 .foregroundStyle(.white.opacity(0.5))
                 .padding(.horizontal)
             
-            let agentStats = profile.agent_stats ?? []
-            let totalGames = agentStats.reduce(0) { $0 + (Int($1.usage_count) ?? 0) }
-            
-            let avgRating = agentStats.reduce(0.0) { $0 + (Double($1.rating) ?? 0) * Double(Int($1.usage_count) ?? 0) } / max(Double(totalGames), 1)
-            let avgAcs = agentStats.reduce(0.0) { $0 + (Double($1.acs) ?? 0) * Double(Int($1.usage_count) ?? 0) } / max(Double(totalGames), 1)
-            let avgKd = agentStats.reduce(0.0) { $0 + (Double($1.kd) ?? 0) * Double(Int($1.usage_count) ?? 0) } / max(Double(totalGames), 1)
-            let avgKast = agentStats.reduce(0.0) { $0 + (Double($1.kast.replacingOccurrences(of: "%", with: "")) ?? 0) * Double(Int($1.usage_count) ?? 0) } / max(Double(totalGames), 1)
-            let avgAdr = agentStats.reduce(0.0) { $0 + (Double($1.adr) ?? 0) * Double(Int($1.usage_count) ?? 0) } / max(Double(totalGames), 1)
+            let topStats = profile.agent_stats?.first // Usually overall or most played
             
             HStack(spacing: 12) {
-                StatBox(title: "RATING", value: agentStats.isEmpty ? "-.--" : String(format: "%.2f", avgRating))
-                StatBox(title: "ACS", value: agentStats.isEmpty ? "---" : String(format: "%.0f", avgAcs))
-                 StatBox(title: "K/D", value: agentStats.isEmpty ? "-.--" : String(format: "%.2f", avgKd))
+                StatBox(title: "RATING", value: topStats?.rating ?? "-.--")
+                StatBox(title: "ACS", value: topStats?.acs ?? "---")
+                 StatBox(title: "K/D", value: topStats?.kd ?? "-.--")
             }
             .padding(.horizontal)
             
             HStack(spacing: 12) {
                 StatBox(title: "WINNINGS", value: profile.total_winnings ?? "$0")
-                StatBox(title: "KAST", value: agentStats.isEmpty ? "--%" : String(format: "%.0f%%", avgKast))
-                StatBox(title: "ADR", value: agentStats.isEmpty ? "---" : String(format: "%.0f", avgAdr))
+                StatBox(title: "KAST", value: topStats?.kast ?? "--%")
+                StatBox(title: "ADR", value: topStats?.adr ?? "---")
             }
             .padding(.horizontal)
         }

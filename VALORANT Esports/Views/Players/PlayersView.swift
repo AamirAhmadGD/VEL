@@ -175,7 +175,6 @@ struct PlayerRowView: View {
             .frame(width: 50, height: 50)
             .background(Circle().fill(.white.opacity(0.1)))
             .clipShape(Circle())
-            .shadow(color: .white.opacity(0.3), radius: 6)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(result.title)
@@ -219,7 +218,6 @@ struct TeamRowView: View {
             .background(Circle().fill(Color.white.opacity(0.05)))
             .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 1))
             .clipShape(Circle())
-            .shadow(color: .white.opacity(0.3), radius: 6)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(result.title)

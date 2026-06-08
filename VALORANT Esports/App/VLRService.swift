@@ -20,8 +20,20 @@ struct VLRAPIErrorResponse: Codable {
 
 @MainActor
 final class VLRService: ObservableObject {
-    
+
     static let shared = VLRService()
+
+    private static let apiSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.requestCachePolicy = .returnCacheDataElseLoad
+        config.urlCache = URLCache(memoryCapacity: 20 * 1024 * 1024,
+                                   diskCapacity: 100 * 1024 * 1024,
+                                   diskPath: "vlr-api-cache")
+        config.timeoutIntervalForRequest = 8
+        config.timeoutIntervalForResource = 12
+        config.httpMaximumConnectionsPerHost = 4
+        return URLSession(configuration: config)
+    }()
     
     /// The base URL determined by the environment (Simulator vs Device)
     private var baseURL: String { AppEnvironment.apiBaseURL }
@@ -66,11 +78,13 @@ final class VLRService: ObservableObject {
         guard let url = URL(string: "\(baseURL)\(endpoint)") else {
             throw URLError(.badURL)
         }
-        
+
         var request = URLRequest(url: url)
-        request.timeoutInterval = 15.0
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
+        request.timeoutInterval = 8.0
+        request.cachePolicy = .returnCacheDataElseLoad
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await Self.apiSession.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
@@ -201,51 +215,101 @@ final class VLRService: ObservableObject {
     private var pendingMatchBuffer: [VLRMatch] = []
     private var nextAPIMatchPage = 1
     
+    private var lastMatchesFetchAt: Date?
+    private var lastLiveFetchAt: Date?
+    private var lastUpcomingRefreshAt: Date?
+    private var cachedMatchSnapshot: (live: [VLRMatch], upcoming: [VLRMatch], timestamp: Date)?
+
+    private let minimumMatchesFetchInterval: TimeInterval = 30
+    private let minimumLiveFetchInterval: TimeInterval = 60
+    private let minimumUpcomingRefreshInterval: TimeInterval = 300
+    private let matchCacheLifetime: TimeInterval = 30
+
     // MARK: - Current Matches (v2)
-    
-    func fetchMatches() async {
+
+    private func hasFreshMatchCache() -> Bool {
+        guard let snapshot = cachedMatchSnapshot else { return false }
+        return Date().timeIntervalSince(snapshot.timestamp) < matchCacheLifetime
+    }
+
+    func fetchMatches(force: Bool = false) async {
+        if !force, let lastFetch = lastMatchesFetchAt,
+           Date().timeIntervalSince(lastFetch) < minimumMatchesFetchInterval {
+            return
+        }
+
+        if !force, hasFreshMatchCache() {
+            self.liveMatches = cachedMatchSnapshot?.live ?? []
+            self.upcomingMatches = cachedMatchSnapshot?.upcoming ?? []
+            isLoadingMatches = false
+            return
+        }
+        lastMatchesFetchAt = Date()
         isLoadingMatches = true
         matchesError = nil
-        
+
         if isAPIAvailable {
             do {
                 async let liveRes: VLRMatchResponse = fetchFromAPI(endpoint: "/v2/match?q=live_score")
                 async let upcomingRes: VLRMatchResponse = fetchFromAPI(endpoint: "/v2/match?q=upcoming")
-                
+
                 let live = try await liveRes
                 let upcoming = try await upcomingRes
-                
-                self.liveMatches = live.data.segments
-                self.upcomingMatches = upcoming.data.segments
-                
+
+                let liveSegments = live.data.segments
+                let upcomingSegments = upcoming.data.segments
+
+                self.liveMatches = liveSegments
+                self.upcomingMatches = upcomingSegments
+                self.cachedMatchSnapshot = (live: liveSegments, upcoming: upcomingSegments, timestamp: Date())
+
                 isLoadingMatches = false
                 return
             } catch {
                 print("API fetchMatches failed: \(error)")
+                if hasFreshMatchCache() {
+                    self.liveMatches = cachedMatchSnapshot?.live ?? []
+                    self.upcomingMatches = cachedMatchSnapshot?.upcoming ?? []
+                    isLoadingMatches = false
+                    return
+                }
             }
         }
-        
-        // Fallback
+
+        // Fallback only when there is no usable cached result.
         async let live = VLRScraperService.shared.scrapeLiveMatches()
         async let upcoming = VLRScraperService.shared.scrapeUpcomingMatches()
-        
+
         self.liveMatches = await live
         self.upcomingMatches = await upcoming
-        
+        self.cachedMatchSnapshot = (live: self.liveMatches, upcoming: self.upcomingMatches, timestamp: Date())
+
         isLoadingMatches = false
     }
-    
+
     // Silent background poll to keep scores updated
-    func fetchLiveMatchesOnly() async {
+    func fetchLiveMatchesOnly(force: Bool = false) async {
+        if !force, let lastFetch = lastLiveFetchAt,
+           Date().timeIntervalSince(lastFetch) < minimumLiveFetchInterval {
+            return
+        }
+        lastLiveFetchAt = Date()
+
         if isAPIAvailable {
             do {
                 let liveRes: VLRMatchResponse = try await fetchFromAPI(endpoint: "/v2/match?q=live_score")
                 if !liveRes.data.segments.isEmpty {
                     self.liveMatches = liveRes.data.segments
+                    self.cachedMatchSnapshot = (live: self.liveMatches, upcoming: self.upcomingMatches, timestamp: Date())
                 }
                 return
             } catch {
                 print("API fetchLiveMatchesOnly failed: \(error)")
+                if hasFreshMatchCache() {
+                    self.liveMatches = cachedMatchSnapshot?.live ?? self.liveMatches
+                    self.upcomingMatches = cachedMatchSnapshot?.upcoming ?? self.upcomingMatches
+                    return
+                }
             }
         }
         
@@ -256,7 +320,13 @@ final class VLRService: ObservableObject {
     }
 
     // Silent background poll to keep upcoming and recent past matches updated (time left/ago)
-    func refreshUpcomingAndPastMatches() async {
+    func refreshUpcomingAndPastMatches(force: Bool = false) async {
+        if !force, let lastFetch = lastUpcomingRefreshAt,
+           Date().timeIntervalSince(lastFetch) < minimumUpcomingRefreshInterval {
+            return
+        }
+        lastUpcomingRefreshAt = Date()
+
         if isAPIAvailable {
             do {
                 async let upcomingRes: VLRMatchResponse = fetchFromAPI(endpoint: "/v2/match?q=upcoming")
@@ -393,10 +463,14 @@ final class VLRService: ObservableObject {
     
     // MARK: - Player Profile
     
-    func fetchPlayerProfile(id: String) async throws -> VLRPlayerProfile {
+    func fetchPlayerProfile(id: String, timespan: String? = nil) async throws -> VLRPlayerProfile {
         if isAPIAvailable {
             do {
-                let response: VLRPlayerResponse = try await fetchFromAPI(endpoint: "/v2/player?id=\(id)")
+                var endpoint = "/v2/player?id=\(id)"
+                if let ts = timespan {
+                    endpoint += "&timespan=\(ts)"
+                }
+                let response: VLRPlayerResponse = try await fetchFromAPI(endpoint: endpoint)
                 return response.data.segments.first!
             } catch {
                 print("API fetchPlayerProfile failed: \(error)")

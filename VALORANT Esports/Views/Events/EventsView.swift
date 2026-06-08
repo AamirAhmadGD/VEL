@@ -269,7 +269,7 @@ struct EventCard: View {
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 50, height: 50)
                             .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .shadow(color: .white.opacity(0.35), radius: 8)
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.18), lineWidth: 1))
                     case .failure:
                         fallbackIcon
                     case .empty:

@@ -89,6 +89,25 @@ struct VLRMatch: Codable, Identifiable, Sendable {
     static var placeholder: VLRMatch {
         VLRMatch(team1: "Team 1", team2: "Team 2", flag1: "us", flag2: "ca", match_page: "/123/placeholder", score1: "0", score2: "0", time_until_match: "TBD", match_event: "Placeholder Event", match_series: "Placeholder Series", time_completed: "TBD", tournament_name: "Placeholder Tournament", round_info: "Placeholder Round", tournament_icon: nil)
     }
+
+    static func placeholder(matchID: String) -> VLRMatch {
+        VLRMatch(
+            team1: "TBD",
+            team2: "TBD",
+            flag1: "flag_us",
+            flag2: "flag_us",
+            match_page: "/\(matchID)/placeholder",
+            score1: nil,
+            score2: nil,
+            time_until_match: nil,
+            match_event: nil,
+            match_series: nil,
+            time_completed: nil,
+            tournament_name: nil,
+            round_info: nil,
+            tournament_icon: nil
+        )
+    }
 }
 
 // MARK: - Event Match List Response Models (/events/matches)

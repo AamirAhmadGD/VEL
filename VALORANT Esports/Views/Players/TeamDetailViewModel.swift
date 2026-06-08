@@ -30,9 +30,10 @@ class TeamDetailViewModel: ObservableObject {
             }
         }
         
+        let teamIDForFetch = resolvedTeamID
         do {
-            async let profileTask = VLRService.shared.fetchTeamProfile(id: resolvedTeamID)
-            async let transactionsTask = VLRService.shared.fetchTeamTransactions(id: resolvedTeamID)
+            async let profileTask = VLRService.shared.fetchTeamProfile(id: teamIDForFetch)
+            async let transactionsTask = VLRService.shared.fetchTeamTransactions(id: teamIDForFetch)
             
             let (fetchedProfile, fetchedTransactions) = try await (profileTask, transactionsTask)
             

@@ -9,6 +9,7 @@ import SwiftUI
 struct MainTabView: View {
     // State to track which tab is selected
     @State private var selectedTab: Int = 0
+    @EnvironmentObject private var deepLinkRouter: DeepLinkRouter
     
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -32,6 +33,11 @@ struct MainTabView: View {
         }
         .toolbarBackground(.ultraThinMaterial, for: .tabBar)
         .toolbarColorScheme(.dark, for: .tabBar)
+        .onChange(of: deepLinkRouter.matchIDToOpen) { newValue in
+            if newValue != nil {
+                selectedTab = 0
+            }
+        }
     }
 }
 
@@ -39,4 +45,5 @@ struct MainTabView: View {
 #Preview {
     MainTabView()
         .environmentObject(FavoritesManager.shared)
+        .environmentObject(DeepLinkRouter())
 }

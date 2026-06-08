@@ -88,24 +88,36 @@ struct MatchDetailView: View {
         case .all: break
         }
 
-        // Sort
+        // Sort with stable tie-breaking by team and player name when values are equal.
         return players.sorted { a, b in
-            let result: Bool
-            switch sortColumn {
-            case .rating:  result = a.avgRating > b.avgRating
-            case .acs:     result = a.avgACS > b.avgACS
-            case .kills:   result = a.kills > b.kills
-            case .deaths:  result = a.deaths > b.deaths
-            case .assists: result = a.assists > b.assists
-            case .kdDiff:  result = a.kdDiff > b.kdDiff
-            case .kast:    result = a.avgKAST > b.avgKAST
-            case .adr:     result = a.avgADR > b.avgADR
-            case .hsPct:   result = a.avgHSPct > b.avgHSPct
-            case .fk:      result = a.fk > b.fk
-            case .fd:      result = a.fd > b.fd
-            case .fkDiff:  result = a.fkDiff > b.fkDiff
+            let left = sortValue(for: a, column: sortColumn)
+            let right = sortValue(for: b, column: sortColumn)
+
+            if left == right {
+                if a.teamIndex != b.teamIndex {
+                    return a.teamIndex < b.teamIndex
+                }
+                return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
             }
-            return sortAscending ? !result : result
+
+            return sortAscending ? left < right : left > right
+        }
+    }
+
+    private func sortValue(for player: AggregatedPlayerStat, column: SortColumn) -> Double {
+        switch column {
+        case .rating:  return player.avgRating
+        case .acs:     return Double(player.avgACS)
+        case .kills:   return Double(player.kills)
+        case .deaths:  return Double(player.deaths)
+        case .assists: return Double(player.assists)
+        case .kdDiff:  return Double(player.kdDiff)
+        case .kast:    return player.avgKAST
+        case .adr:     return Double(player.avgADR)
+        case .hsPct:   return player.avgHSPct
+        case .fk:      return Double(player.fk)
+        case .fd:      return Double(player.fd)
+        case .fkDiff:  return Double(player.fkDiff)
         }
     }
 
@@ -129,6 +141,25 @@ struct MatchDetailView: View {
         )
     }
 
+    private func currentMapLabel() -> String {
+        guard let seg = segment, let maps = seg.maps, !maps.isEmpty else {
+            return "Map 1"
+        }
+
+        // Prefer the currently live map, otherwise show the first available map.
+        if let currentIndex = maps.firstIndex(where: { ($0.score?.team1?.value ?? -1) >= 0 || ($0.score?.team2?.value ?? -1) >= 0 }) {
+            let name = maps[currentIndex].map_name ?? "Map \(currentIndex + 1)"
+            return "Map \(currentIndex + 1): \(name)"
+        }
+
+        let first = maps[0]
+        if let name = first.map_name, !name.isEmpty {
+            return "Map 1: \(name)"
+        }
+
+        return "Map 1"
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -149,16 +180,19 @@ struct MatchDetailView: View {
             if segment?.isLive == true {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
-                        if liveActivityStarted {
-                            Task { await liveActivityManager.endActivity() }
-                            liveActivityStarted = false
-                        } else {
-                            liveActivityManager.startActivity(
-                                for: vlrMatch,
-                                team1LogoURL: segment?.team1?.logo,
-                                team2LogoURL: segment?.team2?.logo
-                            )
-                            liveActivityStarted = true
+                        Task {
+                            if liveActivityStarted {
+                                await liveActivityManager.endActivity(for: vlrMatch.numeric_id)
+                                liveActivityStarted = false
+                            } else {
+                                let started = await liveActivityManager.startActivity(
+                                    for: vlrMatch,
+                                    team1LogoURL: segment?.team1?.logo,
+                                    team2LogoURL: segment?.team2?.logo,
+                                    currentMap: currentMapLabel()
+                                )
+                                liveActivityStarted = started
+                            }
                         }
                     } label: {
                         Image(systemName: liveActivityStarted ? "livephoto.slash" : "livephoto")
@@ -191,30 +225,34 @@ struct MatchDetailView: View {
                             .foregroundStyle(isTracking ? Color(red: 1.0, green: 0.2, blue: 0.2) : .white)
                             .font(.system(size: 18, weight: .semibold))
                     }
+                    .contextMenu {
+                        Button("Send Test Notification") {
+                            Task {
+                                await NotificationManager.shared.sendTestNotification(for: vlrMatch)
+                            }
+                        }
+                    }
                 }
             }
         }
-        .task { 
+        .task {
             await viewModel.load()
+            liveActivityStarted = liveActivityManager.isActivityRunning(for: vlrMatch.numeric_id)
             // Check if this match is already tracked
             isTracking = await NotificationManager.shared.isTracking(matchID: vlrMatch.numeric_id)
         }
         .onReceive(viewModel.refreshTimer) { _ in
-            guard let seg = segment, seg.isLive else { return }
             Task {
                 await viewModel.refresh()
-                // If a live activity is running, push the fresh score
-                if liveActivityStarted, let t1 = seg.team1, let t2 = seg.team2 {
-                    let map = seg.maps?.first(where: { 
-                        ($0.score?.team1?.value ?? -1) >= 0 && ($0.score?.team2?.value ?? -1) >= 0
-                    })?.map_name ?? "Live"
-                    await liveActivityManager.updateActivity(
-                        team1Score: t1.score ?? "-",
-                        team2Score: t2.score ?? "-",
-                        currentMap: map,
-                        isFinal: seg.isFinal
-                    )
-                }
+                guard liveActivityStarted, let seg = segment, seg.isLive,
+                      let t1 = seg.team1, let t2 = seg.team2 else { return }
+                await liveActivityManager.updateActivity(
+                    for: vlrMatch.numeric_id,
+                    team1Score: t1.score ?? "-",
+                    team2Score: t2.score ?? "-",
+                    currentMap: currentMapLabel(),
+                    isFinal: seg.isFinal
+                )
             }
         }
     }
@@ -323,6 +361,20 @@ struct MatchDetailView: View {
                 }
 
                 Color.clear.frame(height: 100)
+            }
+        }
+        .refreshable {
+            await viewModel.refresh()
+            isTracking = await NotificationManager.shared.isTracking(matchID: vlrMatch.numeric_id)
+            if liveActivityStarted, let seg = segment, seg.isLive,
+               let t1 = seg.team1, let t2 = seg.team2 {
+                await liveActivityManager.updateActivity(
+                    for: vlrMatch.numeric_id,
+                    team1Score: t1.score ?? "-",
+                    team2Score: t2.score ?? "-",
+                    currentMap: currentMapLabel(),
+                    isFinal: seg.isFinal
+                )
             }
         }
         .overlay {
@@ -444,8 +496,6 @@ struct MatchDetailView: View {
                             img.resizable().aspectRatio(contentMode: .fit)
                                 .frame(width: 44, height: 44)
                                 .clipShape(Circle())
-                                // Soft white glow for black logo contrast
-                                .shadow(color: .white.opacity(0.35), radius: 8)
                         default:
                             Circle().fill(.white.opacity(0.07)).frame(width: 44, height: 44)
                         }

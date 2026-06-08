@@ -138,7 +138,6 @@ struct TeamLogoImage: View {
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 44, height: 44)
                         .clipShape(Circle())
-                        .shadow(color: .white.opacity(0.35), radius: 8)
                 } placeholder: {
                     Circle().fill(Color.white.opacity(0.05)).frame(width: 54, height: 54)
                 }
@@ -154,7 +153,6 @@ struct TeamLogoImage: View {
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 34, height: 24)
                             .clipShape(RoundedRectangle(cornerRadius: 3))
-                            .shadow(color: .white.opacity(0.35), radius: 8)
                             .frame(width: 54, height: 54)
                             .background(Circle().fill(Color.white.opacity(0.05)))
                             .overlay(Circle().stroke(Color.white.opacity(0.15), lineWidth: 1.5))
